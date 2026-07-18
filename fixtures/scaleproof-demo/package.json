@@ -1,0 +1,11 @@
+{
+  "name": "demo-startup-api",
+  "private": true,
+  "scripts": {
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "4.21.0",
+    "pg": "8.13.0"
+  }
+}

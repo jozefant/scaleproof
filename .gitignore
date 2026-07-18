@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+*.tsbuildinfo
+
+# Test output
+coverage/
+
+# Local environment and secrets
+.env*
+
+# Generated reports
+output/
+
+# Local ideation artifacts
+cognitive-signature-*.md
+natural-answer-*.md
+recipe-answer-*.md
+recipe-trace-*.md
+saas-audit.md
+
+# OS files
+.DS_Store
