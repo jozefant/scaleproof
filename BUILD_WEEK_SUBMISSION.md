@@ -6,13 +6,19 @@ Last verified against the challenge website: 18 July 2026.
 
 **Thread/session ID:** `019f74a7-b675-7cb1-896a-2d3f6bc27ef3`
 
+**Reviewer verification thread/session ID:** `019f767c-02f2-7c62-8e23-c3ce1d4794f7`
+
 This is the primary thread where the majority of Scaleproof's core
 functionality was built. The [Build Week FAQ](https://openai.devpost.com/details/faqs)
 requires the `/feedback` Session ID from that thread.
 
-Before submission, run `/feedback` in this same thread and copy the Session ID
-shown by Codex into Devpost. The value produced by `/feedback` is the
-authoritative submission value; compare it with the recorded thread ID above.
+The reviewer verification thread independently reviewed the architecture and
+verified the implementation produced in the primary thread, including the
+resulting fixes and completion checks.
+
+Before submission, run `/feedback` in the primary thread and copy the Session
+ID shown by Codex into Devpost. The value produced by `/feedback` is the
+authoritative submission value; compare it with the primary thread ID above.
 
 ## Project
 
