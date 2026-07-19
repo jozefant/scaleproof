@@ -12,6 +12,7 @@ export async function acquireDemoRepository() {
     ...snapshot,
     history: {
       source: "synthetic" as const,
+      availability: "available" as const,
       repository: {
         scope: "Repository",
         sampledCommits: 24,
@@ -23,7 +24,7 @@ export async function acquireDemoRepository() {
       },
       modules: [
         {
-          scope: "src",
+          scope: "Major module 1",
           sampledCommits: 18,
           attributedCommits: 18,
           activeContributors: 1,

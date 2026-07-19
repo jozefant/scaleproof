@@ -49,8 +49,9 @@ npm run dev
 Open `http://localhost:3000`.
 
 Scaleproof works without an OpenAI key. In that mode, the deterministic engine
-selects the three founder actions. To enable GPT-5.6 phrasing and
-prioritization, export the key in the current shell before starting the app:
+selects and orders the three founder actions. To enable GPT-5.6 ordering of
+allowlisted remediation codes, export the key in the current shell before
+starting the app:
 
 ```bash
 export OPENAI_API_KEY="..."
@@ -166,10 +167,10 @@ Codex was used to turn the product plan into the local application: research,
 architecture, heuristic design, repository acquisition, privacy controls,
 frontend implementation, tests, and browser QA.
 
-GPT-5.6 has one narrow runtime responsibility: select and phrase up to three
-actions from the allowlisted categorical findings. It cannot change the
-deterministic score or verdict, and its output must match a strict schema using
-known remediation codes.
+GPT-5.6 has one narrow runtime responsibility: propose the order of up to three
+allowlisted remediation codes. Titles, rationale, severity, evidence links,
+and completion conditions remain deterministic. Invalid, duplicate, unknown,
+or incomplete proposals fall back to deterministic risk order.
 
 The Build Week evidence and primary Codex thread record are in
 [BUILD_WEEK_SUBMISSION.md](./BUILD_WEEK_SUBMISSION.md).

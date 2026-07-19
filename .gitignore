@@ -9,6 +9,8 @@ out/
 
 # Test output
 coverage/
+playwright-report/
+test-results/
 
 # Local environment and secrets
 .env*

@@ -1,0 +1,273 @@
+.root {
+  align-self: center;
+  margin: 34px 42px;
+  background: var(--paper-light);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.root :global(.intake-heading) {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  color: var(--paper-light);
+  background: var(--ink);
+  font-size: 9px;
+  font-weight: 740;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.root :global(.intake-body) {
+  position: relative;
+  padding: 30px;
+  overflow: hidden;
+}
+
+.root :global(.panel-index) {
+  position: absolute;
+  top: -30px;
+  right: -4px;
+  color: rgb(239 91 50 / 10%);
+  font-family: var(--display);
+  font-size: 150px;
+  font-weight: 650;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.root :global(.intake-body h2) {
+  position: relative;
+  max-width: 380px;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.root :global(.intake-intro) {
+  position: relative;
+  max-width: 410px;
+  margin: 14px 0 26px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.root :global(.repo-label) {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.root :global(.repo-row) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.root :global(.repo-row input) {
+  width: 100%;
+  min-width: 0;
+  padding: 13px 14px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-right: 0;
+  border-radius: 0;
+  font-size: 13px;
+}
+
+.root :global(.repo-row input::placeholder) {
+  color: #999487;
+}
+
+.root :global(.public-repository-warning) {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.root :global(.primary-button),
+.root :global(.text-button) {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  font-weight: 760;
+}
+
+.root :global(.primary-button) {
+  min-width: 116px;
+  padding: 12px 15px;
+  color: white;
+  background: var(--signal);
+  border: 1px solid var(--ink);
+}
+
+.root :global(.primary-button:hover:not(:disabled)) {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.root :global(.questions) {
+  margin-top: 22px;
+  border-top: 1px solid var(--rule);
+}
+
+.root :global(.question) {
+  display: grid;
+  grid-template-columns: 25px minmax(110px, 0.8fr) minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 11px;
+}
+
+.root :global(.question-number) {
+  color: var(--signal);
+  font-weight: 820;
+}
+
+.root :global(.question-copy) {
+  font-weight: 690;
+}
+
+.root :global(.select-shell) {
+  position: relative;
+}
+
+.root :global(.select-shell select) {
+  width: 100%;
+  padding: 8px 29px 8px 9px;
+  appearance: none;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  font-size: 11px;
+}
+
+.root :global(.select-shell svg) {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.root :global(.scan-progress) {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.root :global(.scan-progress > div) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.root :global(.scan-progress small) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.root :global(.cancel-button) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 9px;
+  color: var(--negative);
+  background: transparent;
+  border: 1px solid currentColor;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.root :global(.error-notice) {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 16px;
+  padding: 11px;
+  color: var(--negative);
+  background: var(--negative-soft);
+  border-left: 3px solid var(--negative);
+  font-size: 12px;
+}
+
+.root :global(.demo-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.root :global(.text-button) {
+  padding: 0 0 2px;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  font-size: 11px;
+}
+
+@media (max-width: 1050px) {
+  .root {
+    margin-top: 52px;
+    margin-bottom: 52px;
+  }
+}
+
+@media (max-width: 760px) {
+  .root {
+    order: 1;
+    margin: 18px;
+  }
+
+  .root :global(.intake-body) {
+    padding: 23px 18px;
+  }
+
+  .root :global(.repo-row) {
+    grid-template-columns: 1fr;
+  }
+
+  .root :global(.repo-row input) {
+    border-right: 1px solid var(--ink);
+    border-bottom: 0;
+  }
+
+  .root :global(.question) {
+    grid-template-columns: 24px 1fr;
+  }
+
+  .root :global(.select-shell) {
+    grid-column: 2;
+  }
+
+  .root :global(.demo-row) {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+}

@@ -1,6 +1,6 @@
 import type { DomainId, EvidenceTier, Severity } from "./types";
 
-export const HEURISTIC_VERSION = "0.2.0-hackathon";
+export const HEURISTIC_VERSION = "0.5.0-hackathon";
 
 export const DOMAIN_CONFIG: Record<
   DomainId,
@@ -52,24 +52,9 @@ export const SEVERITY_RANK: Record<Severity, number> = {
   critical: 4,
 };
 
-export const SCAN_LIMITS = {
-  relevantFiles: 5_000,
-  textBytes: 50 * 1024 * 1024,
-  durationMs: 90_000,
-  archiveBytes: 80 * 1024 * 1024,
-  expandedArchiveBytes: 200 * 1024 * 1024,
-  archiveEntries: 25_000,
-} as const;
-
 export const MODEL_LIMITS = {
   targetInputTokens: 12_000,
   hardInputTokens: 16_000,
   maxOutputTokens: 2_000,
   reservedInstructionTokens: 2_000,
-} as const;
-
-export const HISTORY_LIMITS = {
-  recentCommitsPerScope: 100,
-  majorModules: 6,
-  minimumCommits: 10,
 } as const;

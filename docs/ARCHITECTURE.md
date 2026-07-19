@@ -10,7 +10,8 @@ does not retain scan history.
 
 1. Repository content never crosses the OpenAI boundary.
 2. The deterministic engine owns checks, scores, confidence, growth labels, and verdicts.
-3. GPT may select and phrase allowed remediation actions; it cannot invent a control or change a verdict.
+3. GPT may propose only the order of allowed remediation codes. Displayed
+   action copy, severity, sources, and verification remain deterministic.
 4. Every downloaded archive is deleted after success or failure.
 5. Unknown or withheld context is neutral; it may reduce confidence but is not a failure.
 6. A partial scan is explicit and cannot silently receive `Fundable` below 80% file coverage.
@@ -24,11 +25,13 @@ does not retain scan history.
 
 | Module | Responsibility | May depend on |
 | --- | --- | --- |
-| `src/lib/repository` | Strict GitHub URL parsing, temporary acquisition, text scanning, stack detection, anonymous history aggregation | Analysis types and limits |
+| `src/lib/repository` | Strict GitHub URL parsing, temporary acquisition, text scanning, stack detection, anonymous history aggregation | Repository types and repository-owned limits |
 | `src/lib/analysis` | Signals, controls, scoring, verdicts, 10x/100x/team/agent assessments | No UI or OpenAI client |
-| `src/lib/ai` | Allowlisted payload, token budget, structured action synthesis, deterministic fallback | Analysis result types |
-| `src/app/api` | Request validation, status mapping, no-store response boundary | Repository and analysis orchestration |
-| `src/components` | Intake, founder report, chart, evidence dossier, Markdown export | Public report type only |
+| `src/lib/ai` | Allowlisted payload, token budget, structured action proposal, deterministic reconciliation | Analysis draft and public action types |
+| `src/lib/application` | Deterministic orchestration, raw-content release, optional synthesis, and report assembly | Repository, analysis, AI, and report contract |
+| `src/lib/report` | Versioned Zod contract, shared labels, and pure Markdown rendering | Public analysis and repository result types |
+| `src/app/api` | Request validation, status mapping, no-store response boundary | Application orchestrator only |
+| `src/components` | Intake, founder report sections, colocated CSS modules, chart, evidence dossier, and download handoff | Public report contract only |
 
 The dependency direction keeps repository acquisition and UI replaceable without
 changing the scoring model.
@@ -39,14 +42,19 @@ changing the scoring model.
 2. Read GitHub metadata to confirm the repository is public and find its default branch.
 3. Stream a capped archive to an owner-only temporary file.
 4. Extract safely with path preservation disabled.
-5. Discover relevant text files while excluding dependencies, generated output, binaries, and lockfile bodies.
-6. Sample recent repository and major-module commit history, hash contributor
+5. Discover and priority-sort relevant text files while excluding dependencies,
+   generated output, binaries, oversized individual files, and lockfile bodies.
+6. Sample rate-budgeted repository and major-module commit history, hash contributor
    identities, aggregate concentration, and discard raw history.
 7. Evaluate deterministic controls and calculate domain scores, confidence,
    verdict, growth, agent-readiness, and bus-factor assessments.
-8. Build an allowlisted categorical model payload within the target token budget.
-9. Ask GPT-5.6 for structured action priorities or use the deterministic fallback.
-10. Return a no-store report and delete the temporary directory in all cases.
+8. Clear repository file content from the orchestration object graph.
+9. Build an allowlisted categorical model payload within the target token budget.
+10. Reconcile any GPT-5.6 remediation-code ordering proposal with mandatory
+    deterministic actions. Keep titles, rationale, severities, sources, and
+    verification conditions deterministic.
+11. Validate the complete public report against schema version `1.0.0`.
+12. Return a no-store report and delete the temporary directory in all cases.
 
 ## 10x and 100x evolution
 
@@ -71,8 +79,8 @@ The current boundaries support parallel ownership of repository acquisition,
 heuristic controls, GPT synthesis, and frontend/reporting. Before several teams
 work concurrently:
 
-- add contract tests around the `AnalysisReport` schema;
-- split control packs by stack behind the existing evaluator interface;
+- review schema-version compatibility before changing `AnalysisReport`;
+- assign domain control-pack ownership behind the evaluator registry;
 - record scoring changes as versioned decision records;
 - define ownership for security, privacy, and heuristic calibration;
 - keep historical report semantics tied to the recorded heuristic version.
@@ -86,6 +94,8 @@ work concurrently:
 | Archive over 80 MB | Cancel the stream and delete temporary data |
 | Acquisition limit reached | Return a clear timeout and delete temporary data |
 | Scan file/text/time limit reached | Return a visibly partial report and cap the verdict |
+| Client cancellation | Abort GitHub reads, deterministic traversal, and in-flight synthesis, then delete temporary data |
+| GitHub history rate limit | Keep completed aggregates, stop further module requests, and continue with a privacy-safe `rate_limited` history reason |
 | GPT unavailable, invalid, or over budget | Use deterministic actions without changing the score |
 | Unexpected analysis failure | Return a generic no-retention error and run cleanup |
 

@@ -60,8 +60,9 @@ iterating, then run the complete gate before handing off code.
   file-count, token, output, and time limits plus guaranteed cleanup.
 - Never log credentials, repository identifiers, source, paths, commit text,
   contributor identities, secrets, or personal data.
-- The deterministic engine owns scores and verdicts. GPT-5.6 may only select and
-  phrase up to three allowlisted actions.
+- The deterministic engine owns scores, verdicts, and displayed action copy.
+  GPT-5.6 may only propose the order of up to three allowlisted remediation
+  codes.
 - Preserve explicit evidence states: verified, documented, configured, inferred,
   missing, insufficient, and not applicable. Absence of evidence is not proof
   that an operational control fails.

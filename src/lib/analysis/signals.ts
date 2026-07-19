@@ -1,8 +1,10 @@
 import type {
   EvidenceReference,
+} from "./types";
+import type {
   RepositoryFile,
   RepositorySnapshot,
-} from "./types";
+} from "@/lib/repository/types";
 
 export interface RepositoryIndex {
   snapshot: RepositorySnapshot;

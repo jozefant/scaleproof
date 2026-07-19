@@ -1,12 +1,12 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { SCAN_LIMITS } from "@/lib/analysis/constants";
+import { SCAN_LIMITS } from "./policy";
 import type {
   RepositoryFile,
   RepositorySnapshot,
   ScanLimitKind,
-} from "@/lib/analysis/types";
+} from "./types";
 import { unavailableHistory } from "./history";
 
 const SKIPPED_DIRECTORIES = new Set([
@@ -116,20 +116,63 @@ function looksBinary(buffer: Buffer): boolean {
   return false;
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("The scan was cancelled.", "AbortError");
+  }
+}
+
+function scanPriority(relativePath: string): number {
+  const normalized = relativePath.replaceAll("\\", "/").toLowerCase();
+  if (
+    /(^|\/)(package\.json|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|cargo\.toml|go\.mod|pyproject\.toml|requirements\.txt)$/.test(
+      normalized,
+    )
+  ) {
+    return 0;
+  }
+  if (
+    /(^|\/)(\.github\/workflows|gitlab-ci|jenkinsfile|dockerfile|compose|k8s|kubernetes|terraform|security)/.test(
+      normalized,
+    )
+  ) {
+    return 1;
+  }
+  if (
+    /(^|\/)(readme|agents|contributing|security|architecture|adr|docs\/architecture)/.test(
+      normalized,
+    )
+  ) {
+    return 2;
+  }
+  if (/(^|\/)(__tests__|tests?|e2e|specs?)(\/|\.|-)/.test(normalized)) {
+    return 3;
+  }
+  if (/(^|\/)(src|app|apps|packages|services|modules)\//.test(normalized)) {
+    return 4;
+  }
+  return 5;
+}
+
 async function walk(
   root: string,
   current: string,
   discovered: string[],
   deadline: number,
   limits: Set<ScanLimitKind>,
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfAborted(signal);
   if (Date.now() >= deadline) {
     addLimit(limits, "duration");
     return;
   }
 
-  const entries = await readdir(current, { withFileTypes: true });
+  const entries = (await readdir(current, { withFileTypes: true })).sort(
+    (left, right) => left.name.localeCompare(right.name, "en"),
+  );
   for (const entry of entries) {
+    throwIfAborted(signal);
     if (Date.now() >= deadline) {
       addLimit(limits, "duration");
       return;
@@ -140,7 +183,14 @@ async function walk(
 
     if (entry.isDirectory()) {
       if (!SKIPPED_DIRECTORIES.has(entry.name.toLowerCase())) {
-        await walk(root, absolutePath, discovered, deadline, limits);
+        await walk(
+          root,
+          absolutePath,
+          discovered,
+          deadline,
+          limits,
+          signal,
+        );
       }
       continue;
     }
@@ -198,18 +248,33 @@ export async function scanDirectory(input: {
   sourceUrl: string | null;
   startedAt?: number;
   deadline?: number;
+  signal?: AbortSignal;
 }): Promise<RepositorySnapshot> {
   const startedAt = input.startedAt ?? Date.now();
   const deadline = input.deadline ?? startedAt + SCAN_LIMITS.durationMs;
   const limits = new Set<ScanLimitKind>();
   const discovered: string[] = [];
 
-  await walk(input.root, input.root, discovered, deadline, limits);
+  await walk(
+    input.root,
+    input.root,
+    discovered,
+    deadline,
+    limits,
+    input.signal,
+  );
+  discovered.sort((left, right) => {
+    const priorityDifference = scanPriority(left) - scanPriority(right);
+    return priorityDifference || left.localeCompare(right, "en");
+  });
 
   const files: RepositoryFile[] = [];
   let processedTextBytes = 0;
+  let skippedBinaryFiles = 0;
+  let skippedOversizedFiles = 0;
 
   for (const relativePath of discovered) {
+    throwIfAborted(input.signal);
     if (Date.now() >= deadline) {
       addLimit(limits, "duration");
       break;
@@ -221,13 +286,19 @@ export async function scanDirectory(input: {
 
     const absolutePath = path.join(input.root, relativePath);
     const fileStats = await stat(absolutePath);
+    if (fileStats.size > SCAN_LIMITS.individualTextFileBytes) {
+      skippedOversizedFiles += 1;
+      addLimit(limits, "individual_file_bytes");
+      continue;
+    }
     if (processedTextBytes + fileStats.size > SCAN_LIMITS.textBytes) {
       addLimit(limits, "text_bytes");
-      break;
+      continue;
     }
 
     const buffer = await readFile(absolutePath);
     if (looksBinary(buffer)) {
+      skippedBinaryFiles += 1;
       continue;
     }
 
@@ -240,8 +311,14 @@ export async function scanDirectory(input: {
   }
 
   const durationMs = Date.now() - startedAt;
-  const partial =
-    limits.size > 0 || files.length < discovered.length;
+  const unprocessedRelevantFiles = Math.max(
+    0,
+    discovered.length -
+      files.length -
+      skippedBinaryFiles -
+      skippedOversizedFiles,
+  );
+  const partial = limits.size > 0 || unprocessedRelevantFiles > 0;
 
   return {
     repositoryLabel: input.repositoryLabel,
@@ -254,6 +331,9 @@ export async function scanDirectory(input: {
     coverage: {
       discoveredRelevantFiles: discovered.length,
       processedRelevantFiles: files.length,
+      skippedBinaryFiles,
+      skippedOversizedFiles,
+      unprocessedRelevantFiles,
       processedTextBytes,
       durationMs,
       partial,

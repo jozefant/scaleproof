@@ -46,69 +46,6 @@ export interface ScanContext {
   growthTarget: GrowthTarget;
 }
 
-export interface RepositoryFile {
-  path: string;
-  content: string;
-  size: number;
-}
-
-export type ScanLimitKind =
-  | "file_count"
-  | "text_bytes"
-  | "duration"
-  | "archive_bytes";
-
-export interface ScanCoverage {
-  discoveredRelevantFiles: number;
-  processedRelevantFiles: number;
-  processedTextBytes: number;
-  durationMs: number;
-  partial: boolean;
-  limitsCrossed: ScanLimitKind[];
-}
-
-export type BusFactorBand =
-  | "Distributed"
-  | "Moderate concentration"
-  | "High concentration"
-  | "Expected for initial Lovable export"
-  | "Insufficient evidence";
-
-export interface HistoryConcentration {
-  scope: string;
-  sampledCommits: number;
-  attributedCommits: number;
-  activeContributors: number;
-  estimatedBusFactor: number | null;
-  topContributorShare: number | null;
-  sampleWindowDays?: number | null;
-  band: BusFactorBand;
-}
-
-export interface RepositoryProvenance {
-  platform: "Lovable";
-  classification: "initial_export" | "established_project";
-  signals: string[];
-  note: string;
-}
-
-export interface RepositoryHistory {
-  source: "github_recent_commits" | "synthetic" | "unavailable";
-  repository: HistoryConcentration;
-  modules: HistoryConcentration[];
-  note: string;
-  provenance?: RepositoryProvenance;
-}
-
-export interface RepositorySnapshot {
-  repositoryLabel: string;
-  sourceUrl: string | null;
-  files: RepositoryFile[];
-  coverage: ScanCoverage;
-  detectedStacks: string[];
-  history: RepositoryHistory;
-}
-
 export interface EvidenceReference {
   path: string;
   kind: "code" | "configuration" | "test" | "documentation" | "workflow";
@@ -134,6 +71,10 @@ export interface DomainScore {
   weight: number;
   assessableWeight: number;
   applicableWeight: number;
+  positiveEvidenceWeight: number;
+  concreteNegativeWeight: number;
+  missingEvidenceWeight: number;
+  runtimeOnlyWeight: number;
 }
 
 export type Verdict = "Fundable" | "Fixable" | "Rewrite";
@@ -163,46 +104,6 @@ export interface GrowthAssessment {
   agents: AgentReadiness;
 }
 
-export interface FounderAction {
-  rank: 1 | 2 | 3;
-  title: string;
-  rationale: string;
-  remediationCode: string;
-  severity: Severity;
-}
-
-export interface AiSynthesisMeta {
-  source: "gpt-5.6" | "deterministic";
-  model: string | null;
-  findingsIncluded: number;
-  totalFindings: number;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  limited: boolean;
-  note: string;
-}
-
-export interface AnalysisReport {
-  heuristicVersion: string;
-  repositoryLabel: string;
-  sourceUrl: string | null;
-  generatedAt: string;
-  verdict: Verdict;
-  score: number;
-  confidence: number;
-  disclaimer: "Automated snapshot, not an audit";
-  verdictReason: string;
-  context: ScanContext;
-  coverage: ScanCoverage;
-  detectedStacks: string[];
-  domains: DomainScore[];
-  growth: GrowthAssessment;
-  busFactor: RepositoryHistory;
-  actions: FounderAction[];
-  checks: CheckResult[];
-  ai: AiSynthesisMeta;
-}
-
 export interface ScoreResult {
   verdict: Verdict;
   score: number;
@@ -210,4 +111,9 @@ export interface ScoreResult {
   verdictReason: string;
   domains: DomainScore[];
   growth: GrowthAssessment;
+}
+
+export interface AnalysisDraft extends ScoreResult {
+  context: ScanContext;
+  checks: CheckResult[];
 }

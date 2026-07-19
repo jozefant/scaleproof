@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.2.0-hackathon`
+Version: `0.5.0-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -8,7 +8,8 @@ versioned so it can be calibrated from feedback after the hackathon.
 ## Principles
 
 1. Deterministic checks own scores and verdicts.
-2. GPT-5.6 may phrase and prioritize actions but cannot change scores.
+2. GPT-5.6 may propose the order of allowlisted remediation codes. Displayed
+   titles, rationale, severity, sources, and verification remain deterministic.
 3. Repository evidence is not proof of runtime or organizational behaviour.
 4. Documentation earns partial credit but cannot substitute for enforcement.
 5. Missing evidence is different from evidence that a control fails.
@@ -53,6 +54,28 @@ The user interface maps these into readable labels:
 This separation matters. Finding a hardcoded secret is a **verified concern**;
 it must not be confused with a low-confidence or missing-evidence result.
 
+## Detector-strength inventory
+
+Every control pack defines typed metadata beside its evaluator:
+
+- the exact claim;
+- applicability;
+- required signals;
+- disqualifying signals;
+- strongest evidence tier the detector can establish;
+- confidence limitation;
+- remediation code.
+
+The inventory is built only from this static metadata, not from one scan's
+result. Verification fails if a control has missing metadata, unused metadata,
+duplicate metadata, or a remediation mismatch. There is no generic fallback
+rule.
+
+`rel.load-tests` earns enforced evidence only from an executable load test,
+benchmark, configured command, or enforced performance budget. A
+`performance/README.md` can earn documented evidence when it contains a plan;
+its path alone never establishes a repeatable performance test.
+
 ## Control score
 
 Every control has a domain weight, severity, and context rule.
@@ -77,6 +100,12 @@ The domain score is:
 ```text
 earned applicable control weight / scorable applicable control weight * 100
 ```
+
+Each domain also records positive evidence, concrete negative evidence,
+expected but missing repository evidence, and runtime-only evidence as separate
+aggregates. The founder-facing number is the **Repository evidence score**.
+Missing expected evidence lowers this number but is never reclassified as a
+concrete failure.
 
 ## Domain weights
 
@@ -121,10 +150,27 @@ If no repository limit is crossed, scan coverage is `1.0`.
 | --- | --- |
 | `Fundable` | Score 75-100, confidence at least 60, sufficient scan coverage, and no critical blocker |
 | `Fixable` | Score 45-74, or an otherwise strong repository with an isolated critical blocker |
-| `Rewrite` | Score below 45 with multiple structural failures |
+| `Rewrite` | Score below 45 with concrete high-confidence structural failures in at least two load-bearing domains |
 
 `Rewrite` must be supported by problems across multiple domains. One exposed
 secret, one missing runbook, or one old dependency is not sufficient by itself.
+Missing repository evidence never counts toward the required
+structural-failure domains.
+
+Only controls that can establish replacement-level structural failure are
+eligible to contribute a domain toward `Rewrite`:
+
+- module-boundary failure;
+- absence or failure of the executable test and CI foundations;
+- concrete authentication or authorization boundary failure;
+- instance-local request/session state;
+- concrete database-foundation failure;
+- concrete backup-and-restore foundation failure.
+
+Exposed credentials, ownership concentration, missing documentation, policy
+gaps, and operational hygiene findings may block `Fundable` and produce urgent
+actions, but they are not rewrite evidence. The allowlist is encoded in the
+scoring policy and covered by regression fixtures.
 
 ## Verdict caps
 
@@ -175,6 +221,16 @@ Output:
 - `Blocked by architecture`
 - `Insufficient evidence`
 
+`Blocked by architecture` requires a concrete high-confidence `high` or
+`critical` finding in the controls used by that horizon. A low score caused by
+missing evidence produces `Ready with conditions` or `Insufficient evidence`,
+not a blocking claim.
+
+`Likely ready` for 10x additionally requires enforced evidence for dependency
+failure controls, lifecycle health, and a repeatable load or performance path.
+The 100x label also requires enforced HA/failure-domain evidence. These remain
+architecture-readiness judgments, not measured capacity.
+
 ### 100x
 
 Evaluate the 10x controls plus:
@@ -193,14 +249,11 @@ The 100x result should usually be more conservative than the 10x result.
 Evaluate whether additional engineers can work independently:
 
 - onboarding and one-command or clearly documented local setup;
-- explicit architecture and module boundaries;
-- dependency cycles and shared-core concentration;
-- independent build and test loops;
+- architecture documentation and a configured multi-module layout signal;
 - stable API or event contracts between modules;
 - ADRs and ownership documentation;
 - contribution, review, and release workflow;
-- CI feedback speed and scope;
-- change blast radius across nominally separate features.
+- executable CI feedback and verification entry points.
 
 Output:
 
@@ -210,6 +263,8 @@ Output:
 - `Insufficient evidence`
 
 Do not estimate an exact maximum team size from repository evidence.
+The current hackathon detector does not claim dependency-cycle analysis, low
+coupling, independent deployability, or measured change blast radius.
 
 ## AI-agent readiness
 
@@ -245,6 +300,11 @@ For a public GitHub scan:
 4. Immediately convert contributor identifiers into one-way opaque keys.
 5. Estimate the bus factor as the smallest number of contributors responsible
    for at least 50% of attributed commits in the sample.
+
+The module request budget is updated after every GitHub response. Sampling
+stops when the returned budget reaches zero. If repository history succeeds but
+module sampling is rate-limited, the completed repository/module aggregates stay
+visible and the overall history availability is reported as `rate_limited`.
 
 | Band | Heuristic |
 | --- | --- |
@@ -323,6 +383,18 @@ When the OpenAI input limit is crossed:
 6. Keep the deterministic score based on every scanned finding.
 
 ## Calibration
+
+The executable calibration suite contains six synthetic golden scenarios:
+strong enforced evidence, missing repository evidence, concrete multi-domain
+failure, partial scan, compact initial Lovable export, and an unrecognized
+mixed stack. It pins check dispositions, score bands, verdicts, growth labels,
+and top actions.
+
+Detector-specific false-positive cases are attached to their control tests.
+The runtime control inventory records each evaluated claim, applicability,
+required/disqualifying signals, evidence tier, confidence limitation, and
+remediation code. Human calibration remains a separate validation activity;
+unreviewed feedback must not silently change weights.
 
 Record the heuristic version in every report. Future changes should be based on:
 

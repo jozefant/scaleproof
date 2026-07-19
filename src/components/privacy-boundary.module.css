@@ -1,0 +1,47 @@
+.root {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 15px;
+  max-width: 1356px;
+  margin: 0 auto 82px;
+  padding: 22px 24px;
+  color: var(--paper-light);
+  background: var(--ink);
+  border-left: 5px solid var(--signal);
+}
+
+.root > svg {
+  color: var(--signal);
+}
+
+.root strong {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.root p {
+  max-width: 900px;
+  margin: 5px 0 0;
+  color: #c8c6bd;
+  font-size: 12px;
+}
+
+.root small {
+  display: block;
+  margin-top: 8px;
+  color: #aaa89f;
+  font-size: 10px;
+}
+
+.report {
+  margin-right: 42px;
+  margin-left: 42px;
+}
+
+@media (max-width: 760px) {
+  .root,
+  .report {
+    margin: 0 18px 52px;
+  }
+}

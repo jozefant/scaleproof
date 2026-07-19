@@ -1,11 +1,16 @@
 import { z } from "zod";
 
-import { analyzeSnapshot } from "@/lib/analysis/analyze";
+import { analyzeRepository } from "@/lib/application/analyze-repository";
 import { acquireDemoRepository } from "@/lib/repository/demo";
 import {
   acquirePublicRepository,
   RepositoryAcquisitionError,
 } from "@/lib/repository/github";
+import type { RepositorySnapshot } from "@/lib/repository/types";
+import type {
+  AnalysisReport,
+  ScanContext,
+} from "@/lib/report/contract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +63,30 @@ function noStoreHeaders(): HeadersInit {
   };
 }
 
-export async function POST(request: Request): Promise<Response> {
+export interface AnalyzeRouteDependencies {
+  acquireDemo: () => Promise<RepositorySnapshot>;
+  acquirePublic: (
+    repositoryUrl: string,
+    signal?: AbortSignal,
+  ) => Promise<RepositorySnapshot>;
+  analyze: (
+    snapshot: RepositorySnapshot,
+    context: ScanContext,
+    signal?: AbortSignal,
+  ) => Promise<AnalysisReport>;
+}
+
+const DEFAULT_DEPENDENCIES: AnalyzeRouteDependencies = {
+  acquireDemo: acquireDemoRepository,
+  acquirePublic: acquirePublicRepository,
+  analyze: (snapshot, context, signal) =>
+    analyzeRepository(snapshot, context, { signal }),
+};
+
+export async function handleAnalyzeRequest(
+  request: Request,
+  dependencies: AnalyzeRouteDependencies = DEFAULT_DEPENDENCIES,
+): Promise<Response> {
   try {
     const contentLength = Number(request.headers.get("content-length") ?? "0");
     if (contentLength > 8_192) {
@@ -100,19 +128,41 @@ export async function POST(request: Request): Promise<Response> {
 
     const snapshot =
       parsed.data.source === "demo"
-        ? await acquireDemoRepository()
-        : await acquirePublicRepository(parsed.data.repositoryUrl ?? "");
+        ? await dependencies.acquireDemo()
+        : await dependencies.acquirePublic(
+            parsed.data.repositoryUrl ?? "",
+            request.signal,
+          );
 
-    const report = await analyzeSnapshot(snapshot, parsed.data.context);
+    const report = await dependencies.analyze(
+      snapshot,
+      parsed.data.context,
+      request.signal,
+    );
     return Response.json(report, {
       status: 200,
       headers: noStoreHeaders(),
     });
   } catch (error) {
+    if (
+      request.signal.aborted ||
+      (error instanceof DOMException && error.name === "AbortError")
+    ) {
+      return Response.json(
+        {
+          error: "The repository scan was cancelled.",
+          code: "cancelled",
+        },
+        { status: 499, headers: noStoreHeaders() },
+      );
+    }
+
     if (error instanceof RepositoryAcquisitionError) {
       const status =
         error.code === "invalid_url"
           ? 400
+          : error.code === "cancelled"
+            ? 499
           : error.code === "archive_too_large"
             ? 413
             : error.code === "duration_limit"
@@ -135,4 +185,8 @@ export async function POST(request: Request): Promise<Response> {
       { status: 500, headers: noStoreHeaders() },
     );
   }
+}
+
+export async function POST(request: Request): Promise<Response> {
+  return handleAnalyzeRequest(request);
 }

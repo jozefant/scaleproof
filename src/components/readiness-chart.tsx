@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
-import type { DomainScore } from "@/lib/analysis/types";
+import type { PublicDomainScore } from "@/lib/report/contract";
 
 const COLORS = {
   strong: "var(--positive)",
@@ -19,7 +19,7 @@ const COLORS = {
   weak: "var(--negative)",
 };
 
-const SHORT_LABELS: Record<DomainScore["id"], string> = {
+const SHORT_LABELS: Record<PublicDomainScore["id"], string> = {
   architecture: "Architecture",
   quality: "Quality",
   security: "Security",
@@ -39,7 +39,11 @@ function colorForScore(score: number): string {
   return COLORS.weak;
 }
 
-export function ReadinessChart({ domains }: { domains: DomainScore[] }) {
+export function ReadinessChart({
+  domains,
+}: {
+  domains: PublicDomainScore[];
+}) {
   const data = domains.map((domain) => ({
     name: SHORT_LABELS[domain.id],
     score: domain.score,

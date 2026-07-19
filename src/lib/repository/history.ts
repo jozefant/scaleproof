@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 
-import { HISTORY_LIMITS } from "@/lib/analysis/constants";
+import { HISTORY_LIMITS } from "./policy";
 import type {
   HistoryConcentration,
   RepositoryFile,
   RepositoryHistory,
   RepositoryProvenance,
-} from "@/lib/analysis/types";
+} from "./types";
 
 const NON_MODULE_ROOTS = new Set([
   ".github",
@@ -226,9 +226,13 @@ export function contextualizeGeneratedHistory(
   };
 }
 
-export function unavailableHistory(note: string): RepositoryHistory {
+export function unavailableHistory(
+  note: string,
+  availability: RepositoryHistory["availability"] = "unavailable",
+): RepositoryHistory {
   return {
     source: "unavailable",
+    availability,
     repository: {
       scope: "Repository",
       sampledCommits: 0,

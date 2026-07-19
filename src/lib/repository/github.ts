@@ -3,11 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { x as extractTar } from "tar";
 
-import { SCAN_LIMITS } from "@/lib/analysis/constants";
+import { parsePublicGitHubRepositoryUrl } from "@/lib/shared/github-url";
 import type {
   RepositoryHistory,
   RepositorySnapshot,
-} from "@/lib/analysis/types";
+} from "./types";
 import {
   anonymizeContributor,
   contextualizeGeneratedHistory,
@@ -16,6 +16,7 @@ import {
   unavailableHistory,
 } from "./history";
 import { scanDirectory } from "./scanner";
+import { SCAN_LIMITS } from "./policy";
 
 interface GitHubRepositoryLocation {
   owner: string;
@@ -47,6 +48,7 @@ export class RepositoryAcquisitionError extends Error {
       | "download_failed"
       | "archive_too_large"
       | "duration_limit"
+      | "cancelled"
       | "scan_failed",
   ) {
     super(message);
@@ -55,53 +57,37 @@ export class RepositoryAcquisitionError extends Error {
 }
 
 export function parseGitHubUrl(value: string): GitHubRepositoryLocation {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
+  const parsed = parsePublicGitHubRepositoryUrl(value);
+  if (parsed.ok) {
+    return {
+      owner: parsed.value.owner,
+      repository: parsed.value.repository,
+    };
+  }
+
+  if (parsed.reason === "incomplete") {
     throw new RepositoryAcquisitionError(
       "Enter a complete public GitHub repository URL.",
       "invalid_url",
     );
   }
-
-  if (
-    parsed.protocol !== "https:" ||
-    parsed.hostname.toLowerCase() !== "github.com" ||
-    parsed.username ||
-    parsed.password ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    throw new RepositoryAcquisitionError(
-      "Only public https://github.com/owner/repository URLs are supported.",
-      "invalid_url",
-    );
-  }
-
-  const segments = parsed.pathname
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => decodeURIComponent(segment));
-
-  if (segments.length !== 2) {
+  if (parsed.reason === "nested") {
     throw new RepositoryAcquisitionError(
       "Use the repository root URL, not a branch, file, issue, or pull request URL.",
       "invalid_url",
     );
   }
-
-  const owner = segments[0];
-  const repository = segments[1].replace(/\.git$/i, "");
-  const safeSegment = /^[A-Za-z0-9_.-]+$/;
-  if (!safeSegment.test(owner) || !safeSegment.test(repository)) {
+  if (parsed.reason === "invalid_segment") {
     throw new RepositoryAcquisitionError(
       "The GitHub owner or repository name is not valid.",
       "invalid_url",
     );
   }
 
-  return { owner, repository };
+  throw new RepositoryAcquisitionError(
+    "Only public https://github.com/owner/repository URLs are supported.",
+    "invalid_url",
+  );
 }
 
 function githubHeaders(): HeadersInit {
@@ -116,10 +102,30 @@ function githubHeaders(): HeadersInit {
   return headers;
 }
 
+function requestSignal(
+  controller: AbortController,
+  signal?: AbortSignal,
+): AbortSignal {
+  return signal
+    ? AbortSignal.any([controller.signal, signal])
+    : controller.signal;
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new RepositoryAcquisitionError(
+      "The repository scan was cancelled.",
+      "cancelled",
+    );
+  }
+}
+
 async function fetchMetadata(
   location: GitHubRepositoryLocation,
   deadline: number,
+  signal?: AbortSignal,
 ): Promise<{ defaultBranch: string }> {
+  throwIfCancelled(signal);
   const controller = new AbortController();
   const remainingMs = deadline - Date.now();
   if (remainingMs <= 0) {
@@ -138,7 +144,7 @@ async function fetchMetadata(
       `https://api.github.com/repos/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repository)}`,
       {
         headers: githubHeaders(),
-        signal: controller.signal,
+        signal: requestSignal(controller, signal),
         cache: "no-store",
       },
     );
@@ -178,6 +184,7 @@ async function fetchMetadata(
     if (error instanceof RepositoryAcquisitionError) {
       throw error;
     }
+    throwIfCancelled(signal);
     if (Date.now() >= deadline) {
       throw new RepositoryAcquisitionError(
         "The 90-second repository acquisition limit was reached.",
@@ -198,7 +205,9 @@ async function downloadArchive(
   branch: string,
   destination: string,
   deadline: number,
+  signal?: AbortSignal,
 ): Promise<void> {
+  throwIfCancelled(signal);
   const controller = new AbortController();
   const remainingMs = deadline - Date.now();
   if (remainingMs <= 0) {
@@ -216,7 +225,7 @@ async function downloadArchive(
     const response = await fetch(
       `https://codeload.github.com/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repository)}/tar.gz/${encodeURIComponent(branch)}`,
       {
-        signal: controller.signal,
+        signal: requestSignal(controller, signal),
         cache: "no-store",
       },
     );
@@ -233,6 +242,7 @@ async function downloadArchive(
 
     try {
       while (true) {
+        throwIfCancelled(signal);
         const { done, value } = await reader.read();
         if (done) {
           break;
@@ -254,6 +264,7 @@ async function downloadArchive(
     if (error instanceof RepositoryAcquisitionError) {
       throw error;
     }
+    throwIfCancelled(signal);
     if (Date.now() >= deadline) {
       throw new RepositoryAcquisitionError(
         "The 90-second repository acquisition limit was reached.",
@@ -274,14 +285,20 @@ async function fetchRecentContributorKeys(
   branch: string,
   scope: string | null,
   deadline: number,
+  signal?: AbortSignal,
 ): Promise<{
-  sampledCommits: number;
-  contributorKeys: string[];
-  commitDates: number[];
-} | null> {
+  availability: "available" | "rate_limited" | "unavailable";
+  remaining: number | null;
+  sample?: {
+    sampledCommits: number;
+    contributorKeys: string[];
+    commitDates: number[];
+  };
+}> {
+  throwIfCancelled(signal);
   const remainingMs = deadline - Date.now();
   if (remainingMs <= 0) {
-    return null;
+    return { availability: "unavailable", remaining: null };
   }
 
   const controller = new AbortController();
@@ -302,17 +319,30 @@ async function fetchRecentContributorKeys(
       `https://api.github.com/repos/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repository)}/commits?${query.toString()}`,
       {
         headers: githubHeaders(),
-        signal: controller.signal,
+        signal: requestSignal(controller, signal),
         cache: "no-store",
       },
     );
+    const remainingHeader = response.headers.get("x-ratelimit-remaining");
+    const remaining =
+      remainingHeader !== null && /^\d+$/.test(remainingHeader)
+        ? Number(remainingHeader)
+        : null;
     if (!response.ok) {
-      return null;
+      return {
+        availability:
+          response.status === 403 ||
+          response.status === 429 ||
+          remaining === 0
+            ? "rate_limited"
+            : "unavailable",
+        remaining,
+      };
     }
 
     const commits = (await response.json()) as GitHubCommit[];
     if (!Array.isArray(commits)) {
-      return null;
+      return { availability: "unavailable", remaining };
     }
 
     const contributorKeys: string[] = [];
@@ -341,12 +371,17 @@ async function fetchRecentContributorKeys(
     }
 
     return {
-      sampledCommits: commits.length,
-      contributorKeys,
-      commitDates,
+      availability: "available",
+      remaining,
+      sample: {
+        sampledCommits: commits.length,
+        contributorKeys,
+        commitDates,
+      },
     };
   } catch {
-    return null;
+    throwIfCancelled(signal);
+    return { availability: "unavailable", remaining: null };
   } finally {
     clearTimeout(timeout);
   }
@@ -357,44 +392,94 @@ async function fetchRepositoryHistory(
   branch: string,
   snapshot: RepositorySnapshot,
   deadline: number,
+  signal?: AbortSignal,
 ): Promise<RepositoryHistory> {
   const moduleScopes = deriveMajorModuleScopes(snapshot.files);
-  const [repositorySample, ...moduleSamples] = await Promise.all([
-    fetchRecentContributorKeys(location, branch, null, deadline),
-    ...moduleScopes.map((scope) =>
-      fetchRecentContributorKeys(location, branch, scope, deadline),
-    ),
-  ]);
+  const repositoryResult = await fetchRecentContributorKeys(
+    location,
+    branch,
+    null,
+    deadline,
+    signal,
+  );
 
-  if (!repositorySample) {
+  if (!repositoryResult.sample) {
     return unavailableHistory(
-      "Recent git-history metadata was unavailable or rate-limited; no contributor identities were retained.",
+      repositoryResult.availability === "rate_limited"
+        ? "Recent git-history metadata was rate-limited; no contributor identities were retained."
+        : "Recent git-history metadata was unavailable; no contributor identities were retained.",
+      repositoryResult.availability,
     );
   }
+  const repositorySample = repositoryResult.sample;
+  const moduleSamples: Array<
+    Awaited<ReturnType<typeof fetchRecentContributorKeys>>
+  > = [];
+  let remainingBudget = repositoryResult.remaining;
+  let moduleRateLimited = false;
+  let moduleDeadlineLimited = false;
+  for (const scope of moduleScopes) {
+    throwIfCancelled(signal);
+    if (deadline - Date.now() < 1_500) {
+      moduleDeadlineLimited = true;
+      break;
+    }
+    if (remainingBudget !== null && remainingBudget <= 0) {
+      moduleRateLimited = true;
+      break;
+    }
+
+    const result = await fetchRecentContributorKeys(
+      location,
+      branch,
+      scope,
+      deadline,
+      signal,
+    );
+    moduleSamples.push(result);
+    if (result.remaining !== null) {
+      remainingBudget = result.remaining;
+    }
+    if (result.availability === "rate_limited") {
+      moduleRateLimited = true;
+      break;
+    }
+  }
+  const repositoryConcentration = summarizeConcentration(
+    "Repository",
+    repositorySample.sampledCommits,
+    repositorySample.contributorKeys,
+    repositorySample.commitDates,
+  );
+  const modules = moduleSamples.flatMap((result, index) => {
+    const sample = result.sample;
+    return sample
+      ? [
+          summarizeConcentration(
+            `Major module ${index + 1}`,
+            sample.sampledCommits,
+            sample.contributorKeys,
+            sample.commitDates,
+          ),
+        ]
+      : [];
+  });
+  const repositoryAvailability =
+    repositoryConcentration.band === "Insufficient evidence"
+      ? "insufficient_history"
+      : "available";
+  const historyNote = moduleRateLimited
+    ? `Repository history was sampled, but GitHub rate limits stopped module history after ${modules.length} of ${moduleScopes.length} major scopes. Identities and commit text were discarded after aggregation.`
+    : moduleDeadlineLimited
+      ? `Repository history was sampled, but the shared deadline stopped module history after ${modules.length} of ${moduleScopes.length} major scopes. Identities and commit text were discarded after aggregation.`
+      : "Bus factor is a directional estimate from up to 100 recent commits per scope. Identities and commit text were discarded after aggregation.";
 
   const history: RepositoryHistory = {
     source: "github_recent_commits",
-    repository: summarizeConcentration(
-      "Repository",
-      repositorySample.sampledCommits,
-      repositorySample.contributorKeys,
-      repositorySample.commitDates,
-    ),
-    modules: moduleScopes.flatMap((scope, index) => {
-      const sample = moduleSamples[index];
-      return sample
-        ? [
-            summarizeConcentration(
-              scope,
-              sample.sampledCommits,
-              sample.contributorKeys,
-              sample.commitDates,
-            ),
-          ]
-        : [];
-    }),
-    note:
-      "Bus factor is a directional estimate from up to 100 recent commits per scope. Identities and commit text were discarded after aggregation.",
+    availability: moduleRateLimited ? "rate_limited" : repositoryAvailability,
+    repository: repositoryConcentration,
+    modules,
+    note: historyNote,
   };
   return contextualizeGeneratedHistory(snapshot.files, history);
 }
@@ -402,6 +487,7 @@ async function fetchRepositoryHistory(
 async function extractRepositoryArchive(
   archivePath: string,
   tempRoot: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   let expandedBytes = 0;
   let entries = 0;
@@ -413,6 +499,7 @@ async function extractRepositoryArchive(
     preservePaths: false,
     maxDecompressionRatio: 50,
     filter: (_entryPath, entry) => {
+      throwIfCancelled(signal);
       if (
         "type" in entry &&
         (entry.type === "SymbolicLink" || entry.type === "Link")
@@ -438,6 +525,7 @@ async function extractRepositoryArchive(
 
 export async function acquirePublicRepository(
   repositoryUrl: string,
+  signal?: AbortSignal,
 ): Promise<RepositorySnapshot> {
   const startedAt = Date.now();
   const deadline = startedAt + SCAN_LIMITS.durationMs;
@@ -446,14 +534,16 @@ export async function acquirePublicRepository(
   const archivePath = path.join(tempRoot, "repository.tar.gz");
 
   try {
-    const metadata = await fetchMetadata(location, deadline);
+    throwIfCancelled(signal);
+    const metadata = await fetchMetadata(location, deadline, signal);
     await downloadArchive(
       location,
       metadata.defaultBranch,
       archivePath,
       deadline,
+      signal,
     );
-    await extractRepositoryArchive(archivePath, tempRoot);
+    await extractRepositoryArchive(archivePath, tempRoot, signal);
 
     if (Date.now() >= deadline) {
       throw new RepositoryAcquisitionError(
@@ -468,12 +558,14 @@ export async function acquirePublicRepository(
       sourceUrl: `https://github.com/${location.owner}/${location.repository}`,
       startedAt,
       deadline,
+      signal,
     });
     const history = await fetchRepositoryHistory(
       location,
       metadata.defaultBranch,
       snapshot,
       deadline,
+      signal,
     );
     return { ...snapshot, history };
   } catch (error) {

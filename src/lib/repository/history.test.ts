@@ -69,6 +69,7 @@ describe("git-history aggregation", () => {
     const start = Date.parse("2026-07-01T09:00:00Z");
     const rawHistory = {
       source: "github_recent_commits" as const,
+      availability: "available" as const,
       repository: summarizeConcentration(
         "Repository",
         11,
@@ -104,6 +105,7 @@ describe("git-history aggregation", () => {
     const start = Date.parse("2026-01-01T00:00:00Z");
     const rawHistory = {
       source: "github_recent_commits" as const,
+      availability: "available" as const,
       repository: summarizeConcentration(
         "Repository",
         30,

@@ -111,8 +111,9 @@ unknown; the answer changes prioritization, not the underlying evidence.
 ### Readiness domains
 
 1. **Architecture and team scalability**
-   - coherent boundaries and independent modules;
-   - coupling, dependency cycles, shared-core concentration, and change blast radius;
+   - configured module-layout signals and machine-readable contracts;
+   - explicit limitations where coupling, dependency cycles, shared-core
+     concentration, or change blast radius are not actually measured;
    - API contracts, architecture documentation, ADRs, and explicit invariants;
    - onboarding and local setup documentation;
    - contribution workflow, code ownership, test entry points, and the ability
@@ -154,10 +155,11 @@ unknown; the answer changes prioritization, not the underlying evidence.
    - enough architecture and module context for an agent to complete bounded
      work without tribal knowledge.
 
-The report also derives a **team-growth assessment** from module boundaries,
-coupling, onboarding, build/test independence, contracts, ownership, ADRs, and
-CI feedback. It reports whether parallel work looks supported, conditional, or
-blocked; it does not predict an exact maximum team size.
+The report also derives a **team-growth assessment** from onboarding,
+configured module layout, contracts, ownership, ADRs, contribution workflow,
+and executable CI feedback. It reports whether parallel work looks supported,
+conditional, or at coordination risk; it does not claim measured coupling,
+dependency-cycle analysis, change blast radius, or an exact maximum team size.
 
 It separately reports **AI-agent readiness** as `Agent-ready`,
 `Usable with guardrails`, `Weak harness`, or `Insufficient evidence`.
@@ -179,9 +181,9 @@ crossed. The history span describes the export commit burst, not calendar age.
 
 ### Evidence and verdict
 
-The deterministic scanner owns the score and verdict. GPT-5.6 may prioritize
-and rewrite the three founder actions but may not change the score or invent
-findings.
+The deterministic scanner owns the score, verdict, and displayed action copy.
+GPT-5.6 may propose the order of up to three allowlisted remediation codes but
+may not change severity, omit mandatory work, or invent findings or prose.
 
 The versioned heuristic is documented in [SCORING.md](./SCORING.md). It is
 deliberately adjustable after user feedback.

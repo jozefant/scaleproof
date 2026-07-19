@@ -3,26 +3,29 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
 import {
+  HEURISTIC_VERSION,
   MODEL_LIMITS,
   SEVERITY_RANK,
 } from "@/lib/analysis/constants";
 import type {
-  AiSynthesisMeta,
   CheckResult,
   DomainScore,
-  FounderAction,
   GrowthAssessment,
   ScanContext,
   Severity,
   Verdict,
 } from "@/lib/analysis/types";
-import { severityFromString } from "@/lib/analysis/actions";
+import type {
+  AiSynthesisMeta,
+  FounderAction,
+} from "@/lib/report/contract";
+import {
+  mandatoryRemediationCodes,
+  reconcileActionProposal,
+} from "@/lib/analysis/actions";
 
 const ActionSchema = z.object({
   remediationCode: z.string().min(1).max(80),
-  title: z.string().min(1).max(90),
-  rationale: z.string().min(1).max(240),
-  severity: z.enum(["info", "low", "medium", "high", "critical"]),
 });
 
 const FounderActionsSchema = z.object({
@@ -38,9 +41,10 @@ export interface SynthesisInput {
   context: ScanContext;
   checks: CheckResult[];
   fallbackActions: FounderAction[];
+  signal?: AbortSignal;
 }
 
-interface SynthesisResult {
+export interface SynthesisResult {
   actions: FounderAction[];
   meta: AiSynthesisMeta;
 }
@@ -55,7 +59,7 @@ interface AllowlistedFinding {
 }
 
 interface ModelPayload {
-  heuristicVersion: "0.2.0-hackathon";
+  heuristicVersion: string;
   verdict: Verdict;
   score: number;
   confidence: number;
@@ -73,9 +77,35 @@ Do not change the deterministic verdict or score. Do not invent evidence,
 technologies, file names, people, legal compliance, or throughput guarantees.
 Select at most three different remediation codes. Put critical and high risks
 first, then choose the actions with the most leverage for 10x/100x user growth
-or parallel engineering work. Use direct investor-friendly language.
+or parallel engineering work. Return remediation codes only; displayed titles,
+rationales, severity, sources, and verification remain deterministic.
 The report is an automated snapshot, not an audit.
 `.trim();
+
+type ModelProposal = z.infer<typeof FounderActionsSchema>;
+
+interface ModelProposalResponse {
+  parsed: ModelProposal | null;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+export interface SynthesisDependencies {
+  requestProposal?: (
+    payload: ModelPayload,
+    signal?: AbortSignal,
+  ) => Promise<ModelProposalResponse>;
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw (
+      signal.reason ??
+      new DOMException("The repository scan was cancelled.", "AbortError")
+    );
+  }
+}
 
 function estimateTokens(text: string): number {
   // The payload is ASCII-heavy JSON. Dividing by three is intentionally more
@@ -113,7 +143,7 @@ export function buildAllowlistedPayload(input: SynthesisInput): {
     }, {});
 
   const base: ModelPayload = {
-    heuristicVersion: "0.2.0-hackathon",
+    heuristicVersion: HEURISTIC_VERSION,
     verdict: input.verdict,
     score: input.score,
     confidence: input.confidence,
@@ -191,32 +221,11 @@ function fallbackResult(
   };
 }
 
-function normalizeModelActions(
-  actions: z.infer<typeof ActionSchema>[],
-  allowedCodes: Set<string>,
-): FounderAction[] {
-  const unique = new Map<string, z.infer<typeof ActionSchema>>();
-  for (const action of actions) {
-    if (
-      allowedCodes.has(action.remediationCode) &&
-      !unique.has(action.remediationCode)
-    ) {
-      unique.set(action.remediationCode, action);
-    }
-  }
-
-  return [...unique.values()].slice(0, 3).map((action, index) => ({
-    rank: (index + 1) as 1 | 2 | 3,
-    title: action.title,
-    rationale: action.rationale,
-    remediationCode: action.remediationCode,
-    severity: severityFromString(action.severity),
-  }));
-}
-
 export async function synthesizeFounderActions(
   input: SynthesisInput,
+  dependencies: SynthesisDependencies = {},
 ): Promise<SynthesisResult> {
+  throwIfCancelled(input.signal);
   const built = buildAllowlistedPayload(input);
   if (!process.env.OPENAI_API_KEY || built.total === 0) {
     return fallbackResult(
@@ -231,25 +240,12 @@ export async function synthesizeFounderActions(
   }
 
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.parse({
-      model: "gpt-5.6",
-      store: false,
-      max_output_tokens: MODEL_LIMITS.maxOutputTokens,
-      reasoning: { effort: "low" },
-      input: [
-        { role: "system", content: SYSTEM_INSTRUCTIONS },
-        {
-          role: "user",
-          content: JSON.stringify(built.payload),
-        },
-      ],
-      text: {
-        format: zodTextFormat(FounderActionsSchema, "scaleproof_actions"),
-      },
-    });
-
-    const parsed = response.output_parsed;
+    throwIfCancelled(input.signal);
+    const response = await (
+      dependencies.requestProposal ?? requestOpenAiProposal
+    )(built.payload, input.signal);
+    throwIfCancelled(input.signal);
+    const parsed = response.parsed;
     if (!parsed) {
       return fallbackResult(
         input,
@@ -260,17 +256,18 @@ export async function synthesizeFounderActions(
       );
     }
 
-    const allowedCodes = new Set(
-      built.payload.findings.map((finding) => finding.remediationCode),
+    const actions = reconcileActionProposal(
+      input.fallbackActions,
+      parsed.actions,
+      mandatoryRemediationCodes(input.checks),
     );
-    const actions = normalizeModelActions(parsed.actions, allowedCodes);
-    if (actions.length === 0) {
+    if (!actions) {
       return fallbackResult(
         input,
         built.included,
         built.total,
         built.limited,
-        "GPT-5.6 returned no allowed remediation code; deterministic priorities were used.",
+        "GPT-5.6 omitted mandatory work, duplicated actions, or returned an unsupported remediation; deterministic priorities were used.",
       );
     }
 
@@ -281,8 +278,8 @@ export async function synthesizeFounderActions(
         model: response.model,
         findingsIncluded: built.included,
         totalFindings: built.total,
-        inputTokens: response.usage?.input_tokens ?? built.estimatedTokens,
-        outputTokens: response.usage?.output_tokens ?? null,
+        inputTokens: response.inputTokens ?? built.estimatedTokens,
+        outputTokens: response.outputTokens,
         limited: built.limited,
         note: built.limited
           ? `AI synthesis used ${built.included} of ${built.total} actionable findings; the deterministic score used all findings.`
@@ -290,6 +287,7 @@ export async function synthesizeFounderActions(
       },
     };
   } catch {
+    throwIfCancelled(input.signal);
     return fallbackResult(
       input,
       built.included,
@@ -298,4 +296,37 @@ export async function synthesizeFounderActions(
       "GPT-5.6 synthesis was unavailable; deterministic priorities were used without exposing repository content.",
     );
   }
+}
+
+async function requestOpenAiProposal(
+  payload: ModelPayload,
+  signal?: AbortSignal,
+): Promise<ModelProposalResponse> {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const response = await client.responses.parse(
+    {
+      model: "gpt-5.6",
+      store: false,
+      max_output_tokens: MODEL_LIMITS.maxOutputTokens,
+      reasoning: { effort: "low" },
+      input: [
+        { role: "system", content: SYSTEM_INSTRUCTIONS },
+        {
+          role: "user",
+          content: JSON.stringify(payload),
+        },
+      ],
+      text: {
+        format: zodTextFormat(FounderActionsSchema, "scaleproof_actions"),
+      },
+    },
+    { signal },
+  );
+
+  return {
+    parsed: response.output_parsed,
+    model: response.model,
+    inputTokens: response.usage?.input_tokens ?? null,
+    outputTokens: response.usage?.output_tokens ?? null,
+  };
 }

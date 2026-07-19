@@ -9,14 +9,28 @@ import type {
   DomainId,
   DomainScore,
   GrowthAssessment,
-  RepositorySnapshot,
   RuntimeReadiness,
   ScoreResult,
   TeamReadiness,
   Verdict,
 } from "./types";
+import type { RepositorySnapshot } from "@/lib/repository/types";
 
 const DOMAIN_IDS = Object.keys(DOMAIN_CONFIG) as DomainId[];
+
+// Rewrite is reserved for concrete failures that can require replacement of a
+// load-bearing code or runtime foundation. Remediable hygiene, operational, and
+// organizational findings may block Fundable, but they cannot imply a rewrite.
+const REWRITE_ELIGIBLE_CHECK_IDS = new Set([
+  "arch.module-boundaries",
+  "quality.tests",
+  "quality.ci",
+  "security.authentication",
+  "security.authorization",
+  "rel.stateless",
+  "rel.database-foundations",
+  "res.backup-restore",
+]);
 
 function round(value: number): number {
   return Math.round(value);
@@ -26,10 +40,18 @@ function scoreChecks(checks: CheckResult[]): {
   score: number;
   assessableWeight: number;
   applicableWeight: number;
+  positiveEvidenceWeight: number;
+  concreteNegativeWeight: number;
+  missingEvidenceWeight: number;
+  runtimeOnlyWeight: number;
 } {
   let earned = 0;
   let assessableWeight = 0;
   let applicableWeight = 0;
+  let positiveEvidenceWeight = 0;
+  let concreteNegativeWeight = 0;
+  let missingEvidenceWeight = 0;
+  let runtimeOnlyWeight = 0;
 
   for (const check of checks) {
     if (check.outcome === "not_applicable") {
@@ -39,10 +61,21 @@ function scoreChecks(checks: CheckResult[]): {
     applicableWeight += check.weight;
 
     if (check.evidenceTier === "runtime_only") {
+      runtimeOnlyWeight += check.weight;
       continue;
     }
 
     assessableWeight += check.weight;
+    if (check.outcome === "pass") {
+      positiveEvidenceWeight += check.weight;
+    } else if (check.outcome === "fail") {
+      concreteNegativeWeight += check.weight;
+    } else if (
+      check.outcome === "unknown" &&
+      check.evidenceTier === "absent"
+    ) {
+      missingEvidenceWeight += check.weight;
+    }
     const credit =
       check.outcome === "pass"
         ? (EVIDENCE_CREDIT[check.evidenceTier] ?? 0)
@@ -54,6 +87,10 @@ function scoreChecks(checks: CheckResult[]): {
     score: assessableWeight === 0 ? 0 : round((earned / assessableWeight) * 100),
     assessableWeight,
     applicableWeight,
+    positiveEvidenceWeight,
+    concreteNegativeWeight,
+    missingEvidenceWeight,
+    runtimeOnlyWeight,
   };
 }
 
@@ -69,6 +106,10 @@ function calculateDomains(checks: CheckResult[]): DomainScore[] {
       weight: config.weight,
       assessableWeight: result.assessableWeight,
       applicableWeight: result.applicableWeight,
+      positiveEvidenceWeight: result.positiveEvidenceWeight,
+      concreteNegativeWeight: result.concreteNegativeWeight,
+      missingEvidenceWeight: result.missingEvidenceWeight,
+      runtimeOnlyWeight: result.runtimeOnlyWeight,
     };
   });
 }
@@ -76,25 +117,36 @@ function calculateDomains(checks: CheckResult[]): DomainScore[] {
 function readinessFromChecks(
   checks: CheckResult[],
   strongThreshold: number,
+  requiredEnforcedIds: string[],
 ): RuntimeReadiness {
   const result = scoreChecks(checks);
   const confidence =
     result.applicableWeight === 0
       ? 0
       : result.assessableWeight / result.applicableWeight;
-  const criticalFailure = checks.some(
+  const concreteBlockingFinding = checks.some(
     (check) =>
       check.outcome === "fail" &&
+      (check.evidenceTier === "enforced" ||
+        check.evidenceTier === "inferred") &&
       (check.severity === "critical" || check.severity === "high"),
+  );
+  const requiredEvidencePresent = requiredEnforcedIds.every((id) =>
+    checks.some(
+      (check) =>
+        check.id === id &&
+        check.outcome === "pass" &&
+        check.evidenceTier === "enforced",
+    ),
   );
 
   if (confidence < 0.5) {
     return "Insufficient evidence";
   }
-  if (criticalFailure || result.score < 40) {
+  if (concreteBlockingFinding) {
     return "Blocked by architecture";
   }
-  if (result.score >= strongThreshold) {
+  if (result.score >= strongThreshold && requiredEvidencePresent) {
     return "Likely ready";
   }
   return "Ready with conditions";
@@ -116,7 +168,14 @@ function teamReadinessFromChecks(checks: CheckResult[]): TeamReadiness {
   if (result.score >= 45) {
     return "Conditional";
   }
-  return "Coordination risk";
+  const concreteCoordinationFailure = checks.some(
+    (check) =>
+      check.outcome === "fail" &&
+      (check.evidenceTier === "enforced" ||
+        check.evidenceTier === "inferred") &&
+      (check.severity === "high" || check.severity === "critical"),
+  );
+  return concreteCoordinationFailure ? "Coordination risk" : "Conditional";
 }
 
 function agentReadinessFromChecks(checks: CheckResult[]): AgentReadiness {
@@ -128,7 +187,10 @@ function agentReadinessFromChecks(checks: CheckResult[]): AgentReadiness {
       ? 0
       : result.assessableWeight / result.applicableWeight;
 
-  if (confidence < 0.5) {
+  if (
+    confidence < 0.5 ||
+    result.missingEvidenceWeight > result.positiveEvidenceWeight
+  ) {
     return "Insufficient evidence";
   }
   if (result.score >= 75) {
@@ -179,8 +241,17 @@ function calculateGrowth(checks: CheckResult[]): GrowthAssessment {
   );
 
   return {
-    users10x: readinessFromChecks(checks10x, 70),
-    users100x: readinessFromChecks(checks100x, 78),
+    users10x: readinessFromChecks(checks10x, 70, [
+      "rel.failure-controls",
+      "rel.health-lifecycle",
+      "rel.load-tests",
+    ]),
+    users100x: readinessFromChecks(checks100x, 78, [
+      "rel.failure-controls",
+      "rel.health-lifecycle",
+      "rel.load-tests",
+      "rel.ha-path",
+    ]),
     team: teamReadinessFromChecks(teamChecks),
     agents: agentReadinessFromChecks(checks),
   };
@@ -244,17 +315,26 @@ function implementationSurface(snapshot: RepositorySnapshot): number {
 
 function baseVerdict(
   score: number,
-  domains: DomainScore[],
   criticalBlocker: boolean,
+  checks: CheckResult[],
 ): Verdict {
-  const structurallyWeakDomains = domains.filter(
-    (domain) => domain.score < 40,
-  ).length;
+  const concreteStructuralFailureDomains = new Set(
+    checks
+      .filter(
+        (check) =>
+          REWRITE_ELIGIBLE_CHECK_IDS.has(check.id) &&
+          check.outcome === "fail" &&
+          (check.evidenceTier === "enforced" ||
+            check.evidenceTier === "inferred") &&
+          (check.severity === "high" || check.severity === "critical"),
+      )
+      .map((check) => check.domain),
+  );
 
   if (score >= 75 && !criticalBlocker) {
     return "Fundable";
   }
-  if (score < 45 && structurallyWeakDomains >= 2) {
+  if (score < 45 && concreteStructuralFailureDomains.size >= 2) {
     return "Rewrite";
   }
   return "Fixable";
@@ -314,7 +394,7 @@ function verdictReason(
     return `The repository shows enforceable foundations for growth, with a score of ${score}/100 and no critical blocker.`;
   }
   if (verdict === "Rewrite") {
-    return `Multiple load-bearing domains score below the viable threshold; scaling would require replacing several foundations together.`;
+    return `Concrete high-confidence failures span multiple load-bearing domains; scaling would require replacing several foundations together.`;
   }
   return `The core can be retained, but the highest-risk gaps should be closed before materially increasing users or team size.`;
 }
@@ -327,7 +407,7 @@ export function scoreAnalysis(
   const score = calculateOverallScore(domains);
   const confidence = calculateConfidence(domains, snapshot);
   const criticalBlocker = hasCriticalBlocker(checks);
-  const initialVerdict = baseVerdict(score, domains, criticalBlocker);
+  const initialVerdict = baseVerdict(score, criticalBlocker, checks);
   const verdict = applyEvidenceCaps(
     initialVerdict,
     confidence,
