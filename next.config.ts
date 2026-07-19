@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  devIndicators:
+    process.env.PLAYWRIGHT_TEST === "1" ? false : undefined,
   async headers() {
     return [
       {

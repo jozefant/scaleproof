@@ -9,7 +9,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:3100",
     trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    screenshot: "on",
   },
   webServer: {
     command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
@@ -17,7 +17,10 @@ export default defineConfig({
     // Browser tests exercise deterministic synthetic reports only. Never let
     // ambient developer credentials turn the completion gate into a live,
     // latency-variable, billable model test.
-    env: { OPENAI_API_KEY: "" },
+    env: {
+      OPENAI_API_KEY: "",
+      PLAYWRIGHT_TEST: "1",
+    },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
