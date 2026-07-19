@@ -80,33 +80,6 @@ Acceptance:
   appears in logs or metrics.
 - Deployment happens only after explicit user authorization.
 
-## Completed architecture-review outcomes
-
-| ID | Outcome |
-| --- | --- |
-| P0.1 | Missing evidence is separated from concrete failure in scores, verdicts, and growth labels. |
-| P0.2 | All controls have typed detector metadata; documentation cannot earn unsupported enforced evidence. |
-| P0.3 | Founder actions identify their exact source checks, evidence state, and completion condition. |
-| P0.4 | GPT proposes remediation-code order only; displayed claims remain deterministic. |
-| P0.5 | Mobile intake, truthful wait, cancellation, URL preservation, and report download are browser-tested. |
-| P1.1 | Repository, analysis, AI, application, report, API, and UI dependency boundaries are enforced by tests. |
-| P1.2 | The versioned report contract validates safe GitHub links and escapes untrusted Markdown content. |
-| P1.3 | Scanning is deterministic, cancellable, cleanup-safe, and GitHub-rate-aware. |
-| P1.4 | API and browser tests are isolated from ambient OpenAI credentials and external model calls. |
-| P2.1 | Control packs, report sections, and section-specific styles are split along existing boundaries. |
-
-Additional completed follow-ups:
-
-- [done] `Rewrite` requires explicit replacement-level structural failures.
-- [done] Grouped action wording distinguishes concrete findings from missing
-  evidence.
-- [done] Client cancellation reaches acquisition, analysis, and synthesis.
-- [done] Module-history aggregation preserves rate-limit state and completed
-  evidence.
-- [done] Playwright saves one clean final-viewport screenshot per test and
-  suppresses the Next.js development indicator only in the test server.
-- [done] The landing headline remains legible across tested breakpoints.
-
 ## Verification baseline
 
 Verified on 2026-07-19:
