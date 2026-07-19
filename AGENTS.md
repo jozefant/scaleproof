@@ -26,12 +26,15 @@ more than three immediate actions.
 | `src/lib/repository` | Strict GitHub acquisition, scanning, and anonymous history aggregation |
 | `src/lib/analysis` | Deterministic controls, scoring, caps, evidence, and action candidates |
 | `src/lib/ai` | Allowlisted GPT-5.6 synthesis with deterministic fallback |
+| `src/lib/application` | Analysis orchestration and raw-content release before synthesis |
+| `src/lib/report` | Public report contract and Markdown rendering |
 | `fixtures/scaleproof-demo` | Synthetic, stable end-to-end analysis fixture |
-| `docs` | Architecture and GitHub operating guidance |
+| `docs/ARCHITECTURE.md` | Runtime boundaries, dependency direction, and failure behaviour |
 
-Read [PLANNING.md](./PLANNING.md), [SCORING.md](./SCORING.md),
-[SECURITY.md](./SECURITY.md), and [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-before changing product scope, scoring, privacy boundaries, or architecture.
+Use the documentation authority map in [README.md](./README.md). Read
+[SCORING.md](./SCORING.md), [SECURITY.md](./SECURITY.md), or
+[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) before changing its respective
+boundary. Keep current implementation work in [TASKS.md](./TASKS.md).
 
 ## Commands
 
@@ -44,8 +47,8 @@ npm run verify
 ```
 
 `npm run verify` is the definition of technically done. It runs ESLint,
-TypeScript, Vitest, and the production Next.js build. Run focused tests while
-iterating, then run the complete gate before handing off code.
+TypeScript, Vitest, the production Next.js build, and Playwright. Run focused
+tests while iterating, then run the complete gate before handing off code.
 
 ## Non-negotiable rules
 
@@ -95,3 +98,23 @@ iterating, then run the complete gate before handing off code.
 - Documentation matches changed behavior.
 - `npm run verify` passes.
 - The pull request explains user impact, evidence, and any residual risk.
+
+## Recurring task: documentation hygiene
+
+Run this review after any material product-scope, architecture, scoring, or
+security change, and at least monthly while the project is active:
+
+1. Inventory Markdown and text files with
+   `rg --files --hidden -g '*.md' -g '*.txt' -g 'LICENSE' -g '!.git/**'`;
+   include root, `docs`, `.github`, and fixture documentation.
+2. Verify that every current statement has one canonical owner from the
+   [README documentation map](./README.md#documentation-map).
+3. Merge unique current facts into that owner and delete superseded plans,
+   duplicate instructions, stale review narratives, and one-time setup guides.
+   Use Git history as the archive instead of keeping active historical prose.
+4. Keep `TASKS.md` limited to open work, acceptance criteria, and a compact
+   completed-outcomes record.
+5. Preserve Markdown under `fixtures/scaleproof-demo`; it is synthetic scanner
+   evidence, not project documentation.
+6. Check all relative documentation links and run `npm run verify` when the
+   cleanup changes executable configuration or documented behaviour.

@@ -42,3 +42,31 @@ authoritative submission value; compare it with the recorded thread ID above.
 
 The [challenge page](https://openai.devpost.com/) and
 [official rules](https://openai.devpost.com/rules) remain the source of truth.
+
+## First publishing checklist
+
+Keep this project as a standalone repository; do not accidentally add it to a
+parent checkout.
+
+Before the first push:
+
+1. Choose public or private judging visibility.
+2. Confirm `git rev-parse --show-toplevel` resolves to this project and the
+   default branch is `main`.
+3. Review `git status --short` for generated files, dependencies, credentials,
+   local environments, and unrelated changes.
+4. Run `npm ci` and `npm run verify`.
+5. Review the complete staged file list before committing or pushing.
+6. If private, grant the judging accounts listed by the official rules.
+
+After the first successful `main` build, apply the versioned
+`.github/rulesets/main.json` ruleset. The solo-maintainer policy requires the
+`verify` status check, resolved conversations, linear history, pull requests
+with zero mandatory approvals, no force pushes, and no default-branch deletion.
+Allow squash and rebase merges; disable merge commits. Increase approvals and
+enable code-owner review when another maintainer joins.
+
+Also enable Dependabot alerts, security updates, secret scanning, push
+protection, and private vulnerability reporting when supported by the selected
+repository plan. Do not add deployment secrets until deployment is explicitly
+approved.
