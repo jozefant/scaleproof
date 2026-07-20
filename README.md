@@ -186,20 +186,23 @@ repository or add mobile captures to this public gallery.
 | Knowledge concentration and estimated bus factor | [Open PNG](./docs/media/scaleproof-knowledge-concentration.png) |
 | Expanded evidence dossier | [Open PNG](./docs/media/scaleproof-evidence-dossier.png) |
 
-## Documentation map
+## Canonical product documentation
 
-These are the active sources of truth:
+These four documents own the current product behaviour. Keep durable facts in
+their single applicable owner rather than repeating them elsewhere.
 
 | Document | Authority |
 | --- | --- |
 | [README.md](./README.md) | Product boundary, setup, and documentation map |
-| [AGENTS.md](./AGENTS.md) | Agent workflow, non-negotiable rules, and recurring maintenance |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Modules, dependency direction, request lifecycle, and failure behaviour |
 | [SCORING.md](./SCORING.md) | Versioned heuristic, evidence model, verdicts, and calibration policy |
 | [SECURITY.md](./SECURITY.md) | Trust boundary, retention, and public-deployment gate |
-| [TASKS.md](./TASKS.md) | Current implementation backlog and concise completion record |
-| [BUILD_WEEK_SUBMISSION.md](./BUILD_WEEK_SUBMISSION.md) | Temporary submission and first-publishing checklist |
-| [LICENSE](./LICENSE) | MIT terms |
+
+[AGENTS.md](./AGENTS.md) is the contributor operating guide;
+[TASKS.md](./TASKS.md) is the open-work backlog;
+[BUILD_WEEK_SUBMISSION.md](./BUILD_WEEK_SUBMISSION.md) is the Devpost
+worksheet; and [LICENSE](./LICENSE) contains the MIT terms. None is a second
+source of truth for current product behaviour.
 
 Markdown inside `fixtures/scaleproof-demo` is synthetic scanner input, not
 project guidance. Git history is the archive for superseded plans and completed

@@ -9,44 +9,18 @@ architecture review and resolved reviewer comments that previously lived here.
 
 ## Open work
 
-### [ ] P0.6 Make the growth target affect deterministic action priorities
+### [ ] P0.6 Prove growth-target prioritization in the founder-visible flow
 
-The intake says its three optional answers improve prioritization, but changing
-only `growthTarget` currently produces identical deterministic checks, score,
-verdict, growth assessments, and top-three actions. GPT receives the selected
-target, but it may only reorder the same three actions and has no effect when
-synthesis uses the deterministic fallback.
+The deterministic policy is implemented and documented in
+[`SCORING.md`](./SCORING.md#growth-target-action-priority): `growthTarget`
+changes only eligible non-mandatory action order/selection; checks, evidence,
+scores, confidence, verdicts, and growth assessments remain unchanged.
 
-Implementation:
-
-1. Pass `growthTarget` into deterministic action selection.
-2. Add a small, explicit priority policy:
-   - `users_10x`: load testing, statelessness, failure controls, and
-     observability;
-   - `users_100x`: HA path, asynchronous work, failure domains, and recovery;
-   - `engineering_team`: module boundaries, ownership, onboarding, and CI;
-   - `users_and_team`: balance runtime and team actions;
-   - `unknown` and `withheld`: keep neutral ordering.
-3. Apply target preference only among otherwise eligible non-mandatory work.
-   Critical security and recovery remediations must retain precedence.
-4. Keep checks, severity, evidence, domain scores, confidence, verdict, and
-   10x/100x/team assessments independent of the founder's preference.
-5. Keep deterministic selection authoritative. GPT may reorder only the
-   target-aware allowlisted actions.
-6. Document the policy in `SCORING.md` and bump `HEURISTIC_VERSION`.
-
-Acceptance:
-
-- The same synthetic repository can produce a different non-mandatory action
-  selection or order for user-scale and engineering-team targets.
-- Changing only `growthTarget` leaves checks, score, confidence, verdict, and
-  growth assessments unchanged.
-- A critical exposed-secret action remains ahead of every target preference.
-- `unknown` and `withheld` produce the same neutral deterministic priorities.
-- Target-aware deterministic candidates are stable before mandatory GPT
-  synthesis and are the only actions the model may reorder.
-- Unit tests cover every growth target, and an API or browser test proves that
-  changing question C changes the founder-visible priorities.
+Remaining acceptance: add an API-route or Playwright test that changes only
+question C and proves the returned founder-visible action order or selection
+changes. It must also prove that score, verdict, confidence, checks, and growth
+assessments do not change. Keep critical remediation ahead of every target
+preference and keep `unknown` and `withheld` neutral.
 
 Validation:
 
@@ -56,20 +30,12 @@ npm run test:e2e
 npm run verify
 ```
 
-Reviewer verification 2026-07-20: the deterministic policy, critical-action
-precedence, neutral targets, heuristic version, scoring documentation, and
-unit/application tests are correct. One acceptance item remains: add an API
-route or Playwright test that changes only question C and proves the returned
-founder-visible action order or selection changes while the score, verdict,
-confidence, checks, and growth assessments remain unchanged. Do not change the
-priority policy unless that boundary test exposes a defect.
+### [ ] P0.7 Proposed: make GPT synthesis mandatory with bounded retries
 
-### [ ] P0.7 Make GPT synthesis mandatory with bounded retries
-
-Scaleproof currently returns a successful deterministic fallback report when
-OpenAI is not configured, cannot be reached, times out, or returns an unusable
-response. The new product policy requires a usable GPT synthesis before any
-scan can complete.
+Current behaviour is a successful deterministic fallback when OpenAI is not
+configured, cannot be reached, times out, or returns an unusable response. The
+following proposed policy would instead require usable GPT synthesis before a
+scan can complete; it is not current product behaviour.
 
 GPT remains forbidden from changing the deterministic checks, score, verdict,
 severity, evidence, or displayed action copy. If mandatory synthesis cannot be
