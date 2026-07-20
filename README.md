@@ -40,16 +40,19 @@ tenant isolation, observability, feature flags, CI, ownership, decisions,
 dependency freshness limits, and critical-path tests. It is static and
 read-only: it never runs the scanned repository or claims runtime capacity.
 
-## Run locally
+## Setup and run locally
 
-Prerequisites: Node.js 22.11 or newer, npm, and network access to public GitHub.
+Prerequisites: Node.js 22.11 or newer and npm. A network connection to public
+GitHub is needed only when scanning a public repository.
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. For a fast, credential-free walkthrough, click
+**Run the synthetic demo**. It exercises the complete report flow without
+contacting GitHub or OpenAI.
 
 No OpenAI key is required. Without one, deterministic policy orders the founder
 actions. To enable GPT-5.6 ordering of allowlisted remediation codes:
@@ -76,6 +79,36 @@ package remains installed for Next.js and ESLint integrations that still need
 the compiler API. Browser tests use the synthetic repository under
 [`fixtures/scaleproof-demo`](./fixtures/scaleproof-demo) and cannot use ambient
 OpenAI credentials.
+
+## How Codex and GPT-5.6 were used
+
+Codex and GPT-5.6 were used throughout the build: product research,
+architecture, implementation, automated tests, browser QA, and project
+administration such as creating and maintaining the README, license, and
+submission materials.
+
+The development workflow used separate implementer and reviewer Codex/GPT-5.6
+sessions. Both worked from the same [`TASKS.md`](./TASKS.md) list: the
+implementer delivered a scoped item, then the reviewer independently inspected
+the result and recorded newly found issues for the next iteration. This pairing
+was especially effective because the reviewer repeatedly surfaced defects and
+edge cases that were not apparent during implementation.
+
+At runtime, the repository scan and the AI evaluation are deliberately
+separate. Scaleproof acquires and scans a public repository with bounded,
+deterministic code: it calculates evidence, scores, verdicts, severity,
+evidence links, and displayed action copy without sending repository content to
+an AI model. Only after raw source material is cleared can GPT-5.6 receive a
+small categorical, allowlisted summary and propose the ordering of up to three
+remediation codes. Invalid, unavailable, or rejected model output falls back to
+the deterministic order.
+
+This separation keeps the factual result reproducible and makes the AI role
+useful but constrained: GPT-5.6 helps prioritize the existing remediation
+options; it does not inspect repository source or decide the assessment.
+
+The required Build Week evidence and primary Codex thread are recorded in
+[BUILD_WEEK_SUBMISSION.md](./BUILD_WEEK_SUBMISSION.md).
 
 ## How it works
 
@@ -171,16 +204,6 @@ These are the active sources of truth:
 Markdown inside `fixtures/scaleproof-demo` is synthetic scanner input, not
 project guidance. Git history is the archive for superseded plans and completed
 review detail.
-
-## Codex and GPT-5.6
-
-Codex was used for research, architecture, implementation, tests, browser QA,
-and documentation. GPT-5.6 has one narrow runtime role: propose the ordering of
-up to three allowlisted remediation codes. Invalid or unavailable model output
-falls back to deterministic order.
-
-The required Build Week evidence and primary Codex thread are recorded in
-[BUILD_WEEK_SUBMISSION.md](./BUILD_WEEK_SUBMISSION.md).
 
 ## Deployment and license
 

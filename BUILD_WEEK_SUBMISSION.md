@@ -30,6 +30,48 @@ submission value; compare it with the primary thread ID above.
 - **Repository URL:** [github.com/jozefant/scaleproof](https://github.com/jozefant/scaleproof)
 - **Deployed app URL:** Optional; pending
 
+## Devpost additional information (judges and organizers only)
+
+Enter the following values in Devpost's **Additional info** section.
+
+| Devpost field | Submission value |
+| --- | --- |
+| Upload a file | No file upload. The public repository contains the complete source, README, verification instructions, and media. |
+| Submitter Type | Individual |
+| Country of Residence | Slovakia (select **Slovakia**, not **Slovak Republic**) |
+| Category | Developer Tools |
+| Public or private code repo | https://github.com/jozefant/scaleproof |
+| Project URL / credentials | No deployed URL or credentials are required. Use the local test instructions below. |
+| `/feedback` Session ID | `019f74a7-b675-7cb1-896a-2d3f6bc27ef3` |
+
+The listed session is the primary Codex session where most implementation was
+completed. If `/feedback` displays a different Session ID in that thread, use
+the value printed by `/feedback`; it is authoritative.
+
+### Instructions for judges
+
+Scaleproof is a local Next.js application. It requires Node.js 22.11 or newer
+and npm; macOS, Linux, and Windows are supported where those prerequisites and
+the Playwright browser dependencies are available.
+
+```bash
+npm ci
+npm run dev
+```
+
+Open `http://localhost:3000` and click **Run the synthetic demo**. This is the
+recommended judge path: it is deterministic, requires no credentials, does not
+scan a live repository, and shows the full report flow. To run the verification
+gate instead:
+
+```bash
+npm run verify
+```
+
+The public README documents how Codex and GPT-5.6 were used. No account,
+environment file, API key, or other credentials are needed for the synthetic
+demo or verification suite.
+
 ## Devpost project story
 
 Paste the following into Devpost's **About the project** field.
