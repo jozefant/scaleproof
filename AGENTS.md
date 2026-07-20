@@ -89,7 +89,9 @@ while iterating, then run the complete gate before handing off code.
 - Use synthetic fixtures in tests. Do not place customer, private, or sensitive
   repository data in the project.
 - Keep dependency changes intentional and preserve `package-lock.json`.
-- Use feature branches and pull requests once the GitHub ruleset is active.
+- Commit directly to `main`; do not create feature branches or pull requests
+  unless the user explicitly asks. If branch protection blocks a direct push,
+  stop and report the blocker instead of creating a branch.
 - Do not stage, commit, push, publish, or change repository settings unless the
   user explicitly authorizes that action.
 
