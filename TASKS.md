@@ -30,6 +30,62 @@ npm run test:e2e
 npm run verify
 ```
 
+### [ ] P0.8 Correct scanner evidence gaps exposed by the DeepType comparison
+
+The controlled scan of `mawazawa/deeptype` found two critical false negatives
+(tracked external-service credentials and an unauthenticated, wildcard-CORS AI
+Edge Function that logs user content), plus reachability and test-evidence
+blind spots. Fix the evidence model before tuning weights or verdict thresholds.
+Do not add that repository's source, credentials, or history to this project;
+use minimal synthetic fixtures only.
+
+Implementation:
+
+1. Detect credential-shaped values in tracked `.env`-like, editor-tool, and
+   configuration files, including supported vendor prefixes and JWT-shaped
+   publishable tokens. Never retain or display a matched value; return only a
+   safe location and remediation code.
+2. Add Supabase/Edge cross-file controls for a disabled JWT requirement,
+   wildcard CORS, paid-provider calls, request/response logging, input limits,
+   authentication, and timeout evidence. Group correlated evidence into one
+   founder action.
+3. Trace browser `fetch` paths through framework routes, serverless handlers,
+   and deployment rewrites. Report a missing or shadowed backend route as a
+   concrete integration failure.
+4. Add entry-point reachability analysis and exclude generated code dumps,
+   conversation history, screenshots, test reports, and other generated
+   artefacts from positive implementation evidence. Reconcile controls that
+   make the same factual claim so they cannot silently contradict each other.
+5. Map discovered test files to a configured runner, package script, and CI
+   workflow. Credit test evidence as `enforced` only when an executable command
+   or CI workflow invokes that runner.
+
+Acceptance:
+
+- Synthetic fixtures prove each secret family is detected without exposing its
+  value, and a concrete secret caps the verdict and takes action precedence.
+- A synthetic Supabase function with disabled JWT, wildcard CORS, a provider
+  call, and request-body logging yields a concrete security/privacy finding;
+  a secured equivalent does not.
+- A client API path with no handler or a deployment rewrite to the SPA is a
+  verified integration concern; a matching handler passes.
+- Unreachable feature code and generated artefacts cannot earn positive
+  statelessness, security, or test evidence. Conflicting control outcomes fail
+  the inventory/reconciliation test rather than reaching a report.
+- Test files without a wired runner remain missing evidence; a runner invoked
+  by a package script or CI workflow earns the documented/evidence tier stated
+  in `SCORING.md`.
+- Update detector metadata, `SCORING.md`, the heuristic version, and regression
+  fixtures together. Run no real-repository test unless explicitly requested.
+
+Validation:
+
+```bash
+npm test -- src/lib/analysis src/lib/repository src/lib/application
+npm run test:e2e
+npm run verify
+```
+
 ### [ ] P2.2 Complete external heuristic calibration
 
 The automated suite already protects six synthetic golden scenarios: strong
