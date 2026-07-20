@@ -38,4 +38,42 @@ describe("synthetic demo dossier", () => {
       }
     }
   });
+
+  it("changes only visible action priorities when the growth target changes", async () => {
+    async function reportFor(growthTarget: "users_10x" | "engineering_team") {
+      return analyzeRepository(await acquireDemoRepository(), {
+        stage: "prototype",
+        dataSensitivity: "basic_personal",
+        growthTarget,
+      }, {
+        synthesize: async (input) => ({
+          actions: input.fallbackActions,
+          meta: {
+            source: "deterministic",
+            model: null,
+            findingsIncluded: input.fallbackActions.length,
+            totalFindings: input.fallbackActions.length,
+            inputTokens: null,
+            outputTokens: null,
+            limited: false,
+            note: "Synthetic priority-policy test.",
+          },
+        }),
+      });
+    }
+
+    const users = await reportFor("users_10x");
+    const team = await reportFor("engineering_team");
+
+    expect(users.actions.map((action) => action.remediationCode)).not.toEqual(
+      team.actions.map((action) => action.remediationCode),
+    );
+    expect(users.checks).toEqual(team.checks);
+    expect(users.score).toBe(team.score);
+    expect(users.confidence).toBe(team.confidence);
+    expect(users.verdict).toBe(team.verdict);
+    expect(users.growth).toEqual(team.growth);
+    expect(users.actions[0].remediationCode).toBe("remove-exposed-secret");
+    expect(team.actions[0].remediationCode).toBe("remove-exposed-secret");
+  });
 });

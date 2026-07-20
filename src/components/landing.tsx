@@ -37,19 +37,25 @@ export function Landing({
             <h1>
               Can your codebase carry the <em>company</em> you&rsquo;re building?
             </h1>
-            <div className="hero-foot">
-              <p>
-                A fast, evidence-based snapshot for products built with AI,
-                contractors, or a team that moved faster than its foundations.
-              </p>
-              <div className="scale-marker" aria-label="10 times to 100 times">
-                <span>10×</span>
-                <ArrowDown aria-hidden="true" size={18} />
-                <span>100×</span>
-              </div>
+            <p className="hero-summary">
+              A fast, evidence-based snapshot for products built with AI,
+              contractors, or a team that moved faster than its foundations.
+            </p>
+            <div className="hero-scale" aria-label="10 times to 100 times">
+              <span>10× users</span>
+              <ArrowDown aria-hidden="true" size={16} />
+              <span>100× users · a larger team</span>
             </div>
           </div>
           <Intake onReport={onReport} />
+        </section>
+
+        <section className="trust-card" aria-label="Before you start">
+          <div>
+            <span>Before you start</span>
+            <strong>One public repository. No account. Code is never executed.</strong>
+          </div>
+          <p>Results are an automated snapshot, not a compliance certification.</p>
         </section>
 
         <section className="method-strip" aria-label="Scaleproof method">

@@ -1,4 +1,4 @@
-import type { CheckResult } from "./types";
+import type { CheckResult, ScanContext } from "./types";
 import type { FounderAction } from "@/lib/report/contract";
 import { SEVERITY_RANK } from "./constants";
 
@@ -248,8 +248,23 @@ function actionPriority(result: CheckResult): number {
   );
 }
 
+const TARGET_PREFERENCES: Record<ScanContext["growthTarget"], string[]> = {
+  users_10x: ["add-load-path", "remove-request-state", "add-failure-controls", "add-observability"],
+  users_100x: ["define-ha-path", "add-failure-controls", "add-backup-restore", "define-retention"],
+  engineering_team: ["define-module-boundaries", "reduce-knowledge-concentration", "write-onboarding-path", "add-quality-gate", "add-architecture-decisions"],
+  users_and_team: ["add-load-path", "define-module-boundaries", "add-failure-controls", "write-onboarding-path", "add-observability"],
+  unknown: [],
+  withheld: [],
+};
+
+function groupPriority(results: CheckResult[], growthTarget: ScanContext["growthTarget"]): number {
+  const preference = TARGET_PREFERENCES[growthTarget].indexOf(results[0].remediationCode);
+  return preference < 0 ? 0 : TARGET_PREFERENCES[growthTarget].length - preference;
+}
+
 export function selectDeterministicActions(
   checks: CheckResult[],
+  growthTarget: ScanContext["growthTarget"] = "unknown",
 ): FounderAction[] {
   const candidates = checks
     .filter(
@@ -273,9 +288,12 @@ export function selectDeterministicActions(
     ...groups.filter((results) =>
       mandatoryCodes.has(results[0].remediationCode),
     ),
-    ...groups.filter(
-      (results) => !mandatoryCodes.has(results[0].remediationCode),
-    ),
+    ...groups
+      .filter((results) => !mandatoryCodes.has(results[0].remediationCode))
+      .sort((left, right) => {
+        const preference = groupPriority(right, growthTarget) - groupPriority(left, growthTarget);
+        return preference || actionPriority(right[0]) - actionPriority(left[0]);
+      }),
   ];
 
   return selectedGroups

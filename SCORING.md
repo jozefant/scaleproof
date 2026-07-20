@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.6.0-hackathon`
+Version: `0.7.0-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -428,6 +428,24 @@ evidence`, while its file location is still shown as partial evidence.
 
 Missing recovery evidence is `critical` only for a scaling/production context,
 `medium` for an explicitly selected prototype, and `high` otherwise.
+
+### Growth-target action priority
+
+The optional growth target changes only the deterministic order and selection
+of non-mandatory action candidates. It never changes checks, evidence tiers,
+scores, confidence, verdicts, or growth assessments. Critical concrete
+remediation always remains first.
+
+| Target | Preferred non-mandatory remediation themes |
+| --- | --- |
+| 10x users | Load path, statelessness, failure controls, observability |
+| 100x users | HA path, failure controls, recovery, retention |
+| Larger engineering team | Module boundaries, knowledge concentration, onboarding, CI, decisions |
+| Both | Balance the 10x load path with module and onboarding work |
+| Unknown / withheld | Neutral deterministic priority order |
+
+GPT may reorder only the resulting target-aware allowlisted actions. It cannot
+add, remove, or alter the deterministic action candidates.
 
 ## Scan and model limits
 

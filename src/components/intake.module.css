@@ -1,58 +1,57 @@
 .root {
-  align-self: center;
-  margin: 34px 42px;
-  background: var(--paper-light);
-  border: 1px solid var(--ink);
+  width: min(100%, 680px);
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-large);
   box-shadow: var(--shadow);
 }
 
 .root :global(.intake-heading) {
   display: flex;
   justify-content: space-between;
-  padding: 12px 16px;
-  color: var(--paper-light);
-  background: var(--ink);
-  font-size: 9px;
-  font-weight: 740;
-  letter-spacing: 0.15em;
+  gap: 16px;
+  padding: 14px 20px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .root :global(.intake-body) {
-  position: relative;
-  padding: 30px;
-  overflow: hidden;
-}
-
-.root :global(.panel-index) {
-  position: absolute;
-  top: -30px;
-  right: -4px;
-  color: rgb(239 91 50 / 10%);
-  font-family: var(--display);
-  font-size: 150px;
-  font-weight: 650;
-  line-height: 1;
-  pointer-events: none;
+  padding: 26px;
 }
 
 .root :global(.intake-body h2) {
-  position: relative;
-  max-width: 380px;
-  margin: 0;
+  max-width: 530px;
+  margin: 20px 0 0;
   font-family: var(--display);
-  font-size: 40px;
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  font-size: clamp(2.25rem, 4vw, 3.5rem);
+  font-weight: 520;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
 }
 
 .root :global(.intake-intro) {
-  position: relative;
-  max-width: 410px;
-  margin: 14px 0 26px;
+  max-width: 540px;
+  margin: 13px 0 24px;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.65;
+}
+
+.root :global(form) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+}
+
+.root :global(.repo-field) {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .root :global(.repo-label) {
@@ -61,105 +60,174 @@
   align-items: center;
   margin-bottom: 8px;
   font-size: 11px;
-  font-weight: 760;
-  letter-spacing: 0.05em;
+  font-weight: 780;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.root :global(.repo-row) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.root :global(.repo-row input) {
+.root :global(.repo-field input) {
   width: 100%;
   min-width: 0;
+  min-height: 50px;
   padding: 13px 14px;
-  background: transparent;
-  border: 1px solid var(--ink);
-  border-right: 0;
-  border-radius: 0;
-  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius) 0 0 var(--radius);
+  font-size: 14px;
 }
 
-.root :global(.repo-row input::placeholder) {
-  color: #999487;
-}
-
-.root :global(.public-repository-warning) {
-  margin: 7px 0 0;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.root :global(.primary-button),
-.root :global(.text-button) {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0;
-  font-weight: 760;
+.root :global(.repo-field input::placeholder) {
+  color: #929890;
 }
 
 .root :global(.primary-button) {
-  min-width: 116px;
-  padding: 12px 15px;
-  color: white;
+  display: inline-flex;
+  gap: 8px;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  align-items: center;
+  justify-content: center;
+  min-width: 126px;
+  min-height: 50px;
+  padding: 12px 18px;
+  color: #fff;
   background: var(--signal);
-  border: 1px solid var(--ink);
+  border: 1px solid var(--signal);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  box-shadow: 0 7px 18px rgb(221 83 38 / 24%);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .root :global(.primary-button:hover:not(:disabled)) {
-  color: var(--paper);
-  background: var(--ink);
+  background: var(--signal-deep);
+  border-color: var(--signal-deep);
+}
+
+.root :global(.public-repository-warning),
+.root :global(.questions),
+.root :global(.scan-progress),
+.root :global(.error-notice) {
+  grid-column: 1 / -1;
+}
+
+.root :global(.public-repository-warning) {
+  grid-row: 2;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .root :global(.questions) {
-  margin-top: 22px;
-  border-top: 1px solid var(--rule);
+  grid-row: 3;
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
 }
 
 .root :global(.question) {
-  display: grid;
-  grid-template-columns: 25px minmax(110px, 0.8fr) minmax(160px, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--rule);
-  font-size: 11px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.root :global(.question legend) {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  width: 100%;
+  margin-bottom: 9px;
+  padding: 0;
 }
 
 .root :global(.question-number) {
   color: var(--signal);
-  font-weight: 820;
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .root :global(.question-copy) {
-  font-weight: 690;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 760;
 }
 
-.root :global(.select-shell) {
-  position: relative;
+.root :global(.question-optional) {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
 }
 
-.root :global(.select-shell select) {
-  width: 100%;
-  padding: 8px 29px 8px 9px;
-  appearance: none;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 0;
+.root :global(.choice-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.root :global(.choice-card) {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  min-height: 46px;
+  padding: 9px 11px;
+  color: var(--ink-soft);
+  background: var(--surface-subtle);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  cursor: pointer;
   font-size: 11px;
+  font-weight: 670;
+  line-height: 1.3;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
-.root :global(.select-shell svg) {
+.root :global(.choice-card:hover) {
+  background: var(--surface-raised);
+  border-color: var(--rule);
+}
+
+.root :global(.choice-card input) {
   position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.root :global(.choice-indicator) {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #8d948a;
+  border-radius: 50%;
+}
+
+.root :global(.choice-card:has(input:checked)) {
+  color: #8d351c;
+  background: var(--signal-soft);
+  border-color: var(--signal);
+  box-shadow: inset 0 0 0 1px var(--signal);
+}
+
+.root :global(.choice-card:has(input:checked) .choice-indicator) {
+  border-color: var(--signal);
+  box-shadow: inset 0 0 0 4px var(--signal);
+}
+
+.root :global(.choice-card:has(input:focus-visible)) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.root :global(.question:disabled .choice-card) {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .root :global(.scan-progress) {
@@ -168,7 +236,11 @@
   align-items: center;
   justify-content: space-between;
   margin-top: 18px;
+  padding: 13px;
   color: var(--muted);
+  background: var(--surface-subtle);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
   font-size: 10px;
   font-weight: 720;
   letter-spacing: 0.08em;
@@ -191,10 +263,12 @@
   flex: 0 0 auto;
   gap: 6px;
   align-items: center;
+  min-height: 38px;
   padding: 7px 9px;
   color: var(--negative);
-  background: transparent;
+  background: #fff;
   border: 1px solid currentColor;
+  border-radius: 8px;
   font-size: 9px;
   font-weight: 780;
   letter-spacing: 0.08em;
@@ -206,10 +280,11 @@
   gap: 9px;
   align-items: flex-start;
   margin-top: 16px;
-  padding: 11px;
+  padding: 12px;
   color: var(--negative);
   background: var(--negative-soft);
-  border-left: 3px solid var(--negative);
+  border: 1px solid #d99d96;
+  border-radius: var(--radius);
   font-size: 12px;
 }
 
@@ -217,57 +292,85 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 18px;
+  margin-top: 20px;
   color: var(--muted);
   font-size: 11px;
 }
 
 .root :global(.text-button) {
-  padding: 0 0 2px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 36px;
+  padding: 0;
   color: var(--ink);
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--ink);
   font-size: 11px;
-}
-
-@media (max-width: 1050px) {
-  .root {
-    margin-top: 52px;
-    margin-bottom: 52px;
-  }
+  font-weight: 760;
+  text-decoration: underline;
+  text-decoration-color: var(--signal);
+  text-underline-offset: 4px;
 }
 
 @media (max-width: 760px) {
-  .root {
-    order: 1;
-    margin: 18px;
+  .root :global(.intake-heading) {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .root :global(.intake-body) {
-    padding: 23px 18px;
+    padding: 20px 18px;
   }
 
-  .root :global(.repo-row) {
+  .root :global(form) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .root :global(.repo-field),
+  .root :global(.public-repository-warning),
+  .root :global(.questions) {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .root :global(.repo-field input) {
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+
+  .root :global(.primary-button) {
+    position: sticky;
+    z-index: 4;
+    top: 10px;
+    grid-column: auto;
+    grid-row: auto;
+    width: 100%;
+    margin-top: -1px;
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+
+  .root :global(.primary-button:disabled) {
+    position: static;
+  }
+
+  .root :global(.questions) {
+    padding-bottom: 16px;
+  }
+
+  .root :global(.choice-grid) {
     grid-template-columns: 1fr;
   }
 
-  .root :global(.repo-row input) {
-    border-right: 1px solid var(--ink);
-    border-bottom: 0;
-  }
-
-  .root :global(.question) {
-    grid-template-columns: 24px 1fr;
-  }
-
-  .root :global(.select-shell) {
-    grid-column: 2;
+  .root :global(.choice-card) {
+    min-height: 48px;
+    scroll-margin-top: 72px;
+    font-size: 12px;
   }
 
   .root :global(.demo-row) {
     align-items: flex-start;
     flex-direction: column;
-    gap: 9px;
+    gap: 8px;
   }
 }

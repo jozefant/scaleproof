@@ -1,6 +1,18 @@
 import type { AnalysisReport } from "@/lib/report/contract";
 import { CONTEXT_LABELS } from "@/lib/report/presentation";
 
+function RepositoryName({ label }: { label: string }) {
+  const separator = label.indexOf("/");
+  if (separator < 0) return label;
+  return (
+    <>
+      {label.slice(0, separator + 1)}
+      <wbr />
+      {label.slice(separator + 1)}
+    </>
+  );
+}
+
 export function ReportCover({ report }: { report: AnalysisReport }) {
   return (
     <section className="dossier-cover">
@@ -21,13 +33,14 @@ export function ReportCover({ report }: { report: AnalysisReport }) {
           <h1>
             {report.sourceUrl ? (
               <a href={report.sourceUrl} target="_blank" rel="noreferrer">
-                {report.repositoryLabel}
+                <RepositoryName label={report.repositoryLabel} />
               </a>
             ) : (
-              report.repositoryLabel
+              <RepositoryName label={report.repositoryLabel} />
             )}
           </h1>
           <p>{report.verdictReason}</p>
+          <span className="snapshot-qualifier">Automated snapshot · evidence-limited</span>
           <span className="disclaimer">{report.disclaimer}</span>
         </div>
         <div

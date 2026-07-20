@@ -12,6 +12,7 @@ import { PrivacyBoundary } from "../privacy-boundary";
 import { BusFactorSection } from "./bus-factor-section";
 import { EvidenceDossier } from "./evidence-dossier";
 import { FounderActions } from "./founder-actions";
+import { JourneyRail } from "../journey-rail";
 import { ReadinessSection } from "./readiness-section";
 import { ReportCover } from "./report-cover";
 import { downloadReport } from "./report-download";
@@ -66,6 +67,7 @@ export function Report({
           </section>
         )}
 
+        <JourneyRail state="report" />
         <ReportCover report={report} />
         <FounderActions actions={report.actions} />
         <ReadinessSection report={report} />

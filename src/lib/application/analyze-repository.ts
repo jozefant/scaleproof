@@ -49,7 +49,10 @@ export async function analyzeRepository(
   snapshot.files.length = 0;
   throwIfCancelled(options.signal);
 
-  const fallbackActions = selectDeterministicActions(draft.checks);
+  const fallbackActions = selectDeterministicActions(
+    draft.checks,
+    context.growthTarget,
+  );
   const synthesis = await (
     options.synthesize ?? synthesizeFounderActions
   )({

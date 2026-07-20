@@ -15,6 +15,9 @@ test-results/
 # Local environment and secrets
 .env*
 
+# Local tool state
+.serena/
+
 # Generated reports
 output/
 

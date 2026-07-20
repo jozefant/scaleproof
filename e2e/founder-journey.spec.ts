@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 
 const context = {
   stage: "unknown",
@@ -16,6 +22,120 @@ async function demoReport(request: APIRequestContext): Promise<unknown> {
   return response.json();
 }
 
+type ArtifactViewport = {
+  name: "desktop" | "mobile";
+  size: { width: number; height: number };
+};
+
+const ARTIFACT_VIEWPORTS: ArtifactViewport[] = [
+  { name: "desktop", size: { width: 1440, height: 960 } },
+  { name: "mobile", size: { width: 390, height: 844 } },
+];
+
+async function saveViewportArtifact(
+  page: Page,
+  testInfo: TestInfo,
+  name: string,
+): Promise<void> {
+  const layout = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+  }));
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  await page.screenshot({ path: testInfo.outputPath(name) });
+}
+
+async function scrollHeadingBelowReportHeader(
+  page: Page,
+  heading: ReturnType<Page["locator"]>,
+): Promise<void> {
+  await heading.evaluate((element) => {
+    element.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
+  });
+  await expect(heading).toBeInViewport();
+  const [headerBox, headingBox] = await Promise.all([
+    page.locator(".report-header").boundingBox(),
+    heading.boundingBox(),
+  ]);
+  expect(headerBox).not.toBeNull();
+  expect(headingBox).not.toBeNull();
+  expect(headingBox?.y).toBeGreaterThanOrEqual(
+    (headerBox?.y ?? 0) + (headerBox?.height ?? 0),
+  );
+}
+
+async function captureFounderFlowArtifacts(
+  page: Page,
+  request: APIRequestContext,
+  testInfo: TestInfo,
+  viewport: ArtifactViewport,
+): Promise<void> {
+  const report = await demoReport(request);
+  await page.setViewportSize(viewport.size);
+  await page.goto("/");
+  const analyze = page.getByRole("button", { name: "Analyze" });
+  await expect(page.getByLabel("Public repository URL")).toBeInViewport();
+  await expect(analyze).toBeInViewport();
+  await saveViewportArtifact(page, testInfo, `${viewport.name}-landing.png`);
+
+  const stage = page.getByRole("radio", { name: "Scaling or production" });
+  const data = page.getByRole("radio", { name: "Sensitive or regulated data" });
+  const growthStart = page.getByRole("radio", { name: "10x more users" });
+  const growth = page.getByRole("radio", { name: "100x more users" });
+  await stage.check();
+  await data.check();
+  await growthStart.press("ArrowRight");
+  await expect(growth).toBeFocused();
+  await expect(growth).toBeChecked();
+  await expect.poll(() => growth.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
+  await expect(analyze).toBeInViewport();
+  const [analyzeBox, focusedChoiceBox] = await Promise.all([
+    analyze.boundingBox(),
+    growth.locator("xpath=..").boundingBox(),
+  ]);
+  expect(analyzeBox).not.toBeNull();
+  expect(focusedChoiceBox).not.toBeNull();
+  expect(focusedChoiceBox?.y).toBeGreaterThanOrEqual(
+    (analyzeBox?.y ?? 0) + (analyzeBox?.height ?? 0),
+  );
+  await saveViewportArtifact(page, testInfo, `${viewport.name}-selected-focus.png`);
+
+  await page
+    .getByLabel("Public repository URL")
+    .fill("https://github.com/example/repository/tree/main");
+  await analyze.click();
+  await expect(page.locator(".error-notice")).toBeVisible();
+  await expect(stage).toBeChecked();
+  await expect(data).toBeChecked();
+  await expect(growth).toBeChecked();
+
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/analyze", async (route) => {
+    await held;
+    await route.fulfill({ status: 200, json: report });
+  });
+  await page
+    .getByLabel("Public repository URL")
+    .fill("https://github.com/example/repository");
+  await analyze.click();
+  const radios = await page.getByRole("radio").all();
+  await Promise.all(radios.map((radio) => expect(radio).toBeDisabled()));
+  await saveViewportArtifact(page, testInfo, `${viewport.name}-processing.png`);
+
+  release?.();
+  await expect(page.getByText("Technical readiness dossier")).toBeVisible();
+
+  await scrollHeadingBelowReportHeader(page, page.locator(".dossier-cover h1"));
+  await saveViewportArtifact(page, testInfo, `${viewport.name}-report-summary.png`);
+  await scrollHeadingBelowReportHeader(page, page.locator(".do-now h2"));
+  await saveViewportArtifact(page, testInfo, `${viewport.name}-actions.png`);
+  await scrollHeadingBelowReportHeader(page, page.locator(".evidence-dossier h2"));
+  await saveViewportArtifact(page, testInfo, `${viewport.name}-evidence.png`);
+}
+
 test("landing to demo verdict shows three evidence-linked actions", async ({
   page,
 }) => {
@@ -24,6 +144,18 @@ test("landing to demo verdict shows three evidence-linked actions", async ({
 
   await expect(page.getByText("Technical readiness dossier")).toBeVisible();
   await expect(page.locator(".action-item")).toHaveCount(3);
+  const verdict = page.locator(".verdict-stamp strong");
+  const panel = page.locator(".verdict-stamp");
+  const [verdictBox, panelBox] = await Promise.all([
+    verdict.boundingBox(),
+    panel.boundingBox(),
+  ]);
+  expect(verdictBox).not.toBeNull();
+  expect(panelBox).not.toBeNull();
+  expect(verdictBox?.x).toBeGreaterThanOrEqual(panelBox?.x ?? 0);
+  expect((verdictBox?.x ?? 0) + (verdictBox?.width ?? 0)).toBeLessThanOrEqual(
+    (panelBox?.x ?? 0) + (panelBox?.width ?? 0),
+  );
 
   await page
     .getByRole("button", { name: /^Open supporting check / })
@@ -124,6 +256,42 @@ test("invalid nested GitHub URL is preserved with the specific correction", asyn
   await expect(page.getByLabel("Public repository URL")).toHaveValue(nested);
 });
 
+test("optional context uses radio cards and submits the selected values", async ({
+  page,
+  request,
+}) => {
+  const report = await demoReport(request);
+  let submittedContext: unknown;
+  await page.route("**/api/analyze", async (route) => {
+    submittedContext = route.request().postDataJSON()?.context;
+    await route.fulfill({ status: 200, json: report });
+  });
+  await page.goto("/");
+
+  await expect(page.locator("select")).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "I don't know" }).first()).toBeChecked();
+  await page.getByRole("radio", { name: "Scaling or production" }).check();
+  await page.getByRole("radio", { name: "Sensitive or regulated data" }).check();
+  await page.getByRole("radio", { name: "100x more users" }).check();
+
+  await page
+    .getByLabel("Public repository URL")
+    .fill("https://github.com/example/repository");
+  await page.getByRole("button", { name: "Analyze" }).click();
+  await expect(page.getByText("Technical readiness dossier")).toBeVisible();
+  expect(submittedContext).toEqual({
+    stage: "scaling_production",
+    dataSensitivity: "sensitive_regulated",
+    growthTarget: "users_100x",
+  });
+});
+
+for (const viewport of ARTIFACT_VIEWPORTS) {
+  test(`founder flow saves ${viewport.name} UI artifacts`, async ({ page, request }, testInfo) => {
+    await captureFounderFlowArtifacts(page, request, testInfo, viewport);
+  });
+}
+
 test("Markdown download contains the same action sources and verification", async ({
   page,
 }) => {
@@ -169,22 +337,4 @@ test("cancel returns the preserved form to a usable state without an alert", asy
     "https://github.com/example/repository",
   );
   releaseRequest?.();
-});
-
-test("390x844 shows the primary CTA and keeps report download available", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-
-  const input = page.getByLabel("Public repository URL");
-  const analyze = page.getByRole("button", { name: "Analyze" });
-  await expect(input).toBeInViewport();
-  await expect(analyze).toBeInViewport();
-
-  await page.getByRole("button", { name: "Run the synthetic demo" }).click();
-  await expect(page.getByText("Technical readiness dossier")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Download Markdown report" }),
-  ).toBeVisible();
 });

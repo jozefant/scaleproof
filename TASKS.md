@@ -56,6 +56,14 @@ npm run test:e2e
 npm run verify
 ```
 
+Reviewer verification 2026-07-20: the deterministic policy, critical-action
+precedence, neutral targets, heuristic version, scoring documentation, and
+unit/application tests are correct. One acceptance item remains: add an API
+route or Playwright test that changes only question C and proves the returned
+founder-visible action order or selection changes while the score, verdict,
+confidence, checks, and growth assessments remain unchanged. Do not change the
+priority policy unless that boundary test exposes a defect.
+
 ### [ ] P0.7 Make GPT synthesis mandatory with bounded retries
 
 Scaleproof currently returns a successful deterministic fallback report when
@@ -123,214 +131,6 @@ Validation:
 npm test -- src/lib/ai/synthesis.test.ts src/app/api/analyze/route.test.ts
 npm run test:e2e
 OPENAI_API_KEY= npm run verify
-```
-
-### [ ] P1.5 Replace the three selects with fast radio choices
-
-The three optional founder questions currently use closed combo boxes. Each
-answer requires opening a menu, finding an option, and closing it before moving
-on. Replace them with visible radio choices so founders can scan all options
-and answer each question with one click or tap.
-
-Design direction:
-
-- Apply the guided-utility theme defined by P1.9; P1.9 supersedes the previous
-  hard-border editorial treatment but not this task's interaction and
-  accessibility requirements.
-- Use compact choice cards with visible radio indicators and an unmistakable
-  orange selected state. Do not introduce a component library or decorative
-  animation.
-- Keep the repository scan as the dominant action and preserve the existing
-  `A/B/C` question order unless P1.9 provides an equally clear accessible
-  hierarchy.
-
-Implementation:
-
-1. Replace the generic `Question` select renderer with semantic
-   `<fieldset>`/`<legend>` radio groups using native `<input type="radio">`
-   controls.
-2. Make the whole option label clickable. Use at least a 44-pixel tap target,
-   a visible focus indicator, sufficient contrast, and clear hover, checked,
-   disabled, and keyboard states.
-3. Preserve the existing values, labels, defaults, and API contract. `I don't
-   know` remains selected by default and `Prefer not to say` remains available
-   for every group.
-4. Use a compact responsive grid rather than 18 vertically stacked rows.
-   Prefer two columns where labels remain readable and fall back to one column
-   only when the viewport cannot support the minimum tap width.
-5. Keep one primary `Analyze` action reachable after any selection without
-   forcing the founder to scroll back to the repository field. On narrow
-   screens it may remain sticky within the intake panel, provided it respects
-   the safe area and never covers a radio option.
-6. Disable every radio while analysis is running and preserve the selected
-   state after validation or acquisition errors.
-7. Keep the implementation local to the intake component and its CSS module;
-   do not add a form library or global state manager.
-
-Acceptance:
-
-- No context question renders a `<select>` or requires opening a menu.
-- A founder can select one answer in each group and start the scan using only
-  three option taps plus the Analyze action.
-- Clicking anywhere on an option selects it, and arrow-key navigation follows
-  native radio-group behavior.
-- Each group exposes an accessible name, one checked value, and no effect on
-  the other two groups.
-- The submitted request contains the exact selected `stage`,
-  `dataSensitivity`, and `growthTarget` values.
-- `unknown` is selected initially, and all selected values survive a
-  founder-correctable error.
-- At 390 x 844 there is no horizontal overflow, clipped label, covered option,
-  or need to scroll back upward to find Analyze.
-- Saved desktop and 390 x 844 Playwright screenshots show clear selected,
-  unselected, focus, and disabled states without weakening the existing visual
-  identity.
-
-Validation:
-
-```bash
-npm run test:e2e
-npm run verify
-```
-
-### [ ] P1.9 Adopt a calm guided-utility UI theme
-
-Refresh the landing, intake, progress, and report presentation using the visual
-and interaction principles demonstrated by the
-[Lovable Cloud to Supabase Exporter](https://dreamlit.ai/tools/lovable-cloud-to-supabase-exporter).
-Use it as a design reference, not as a source of copied brand assets, product
-copy, or components. Preserve Scaleproof's product boundary, report contract,
-deterministic scoring, privacy constraints, and three-action founder brief.
-
-Main differences to resolve:
-
-| Area | Current Scaleproof UI | Target adaptation |
-| --- | --- | --- |
-| Visual stance | Editorial technical dossier with cream paper, serif display type, hard black rules, and an oversized verdict stamp | Calm guided technical utility with a light canvas, restrained typography, soft borders, rounded cards, and signal-orange emphasis |
-| Entry flow | Large split hero and intake panel compete for the first viewport | Compact value statement, one dominant repository action, a short prerequisites card, and a visible path to the result |
-| Interaction model | Form followed by a dense long-form dossier | Progressive `Repository -> Evidence -> Three actions` state model with task-oriented cards and contextual help |
-| Hierarchy | Dramatic headings and several visually equal report sections | Moderate headings, generous whitespace, summary first, three actions second, expandable evidence last |
-| Trust | Methodology and privacy prose carry most of the trust load | Keep those claims, then reinforce them with concise prerequisites, explicit automated-snapshot language, safe processing states, and evidence locations |
-| Mobile | Large type and dense grids create wrapping pressure | One-column cards, compact controls, predictable spacing, and readable repository labels |
-
-Design direction:
-
-- Aesthetic: **calm guided technical utility**.
-- Purpose: let a busy founder understand the input, start a scan, recognize the
-  current phase, and reach the verdict plus three actions without learning the
-  scoring system first.
-- Differentiation anchor: a persistent but compact
-  `Repository -> Evidence -> Three actions` rail. With the logo removed, this
-  rail and the evidence-linked action cards should still identify Scaleproof.
-- DFII: aesthetic impact 3, context fit 5, implementation feasibility 4,
-  performance safety 5, consistency risk 2; total **15**.
-
-Design system:
-
-- Reuse the bundled Newsreader and Manrope fonts. Use Manrope for operational
-  UI and body copy; reserve Newsreader for the hero promise and verdict so the
-  interface becomes calmer without losing Scaleproof's identity.
-- Replace the paper texture and full-page center rule with a light neutral
-  canvas, white/off-white cards, soft gray dividers, signal orange for the
-  primary action and current state, and the existing green/red semantics only
-  for verified positive and concrete negative results.
-- Define the theme through CSS variables. Use one spacing rhythm, consistent
-  10-16 pixel card radii, subtle one-level shadows, and no decorative gradients
-  or animation.
-- Motion is limited to real phase changes, disclosure expansion, and focus or
-  hover feedback. Respect `prefers-reduced-motion`.
-
-Implementation:
-
-1. Refactor the global theme tokens and the landing/report CSS modules without
-   adding a component library, new font, animation package, or global state
-   manager.
-2. Replace the split campaign hero with a centered, bounded introduction and a
-   prominent scan card. Keep the public GitHub root URL as the first interactive
-   element and keep the synthetic demo visibly secondary.
-3. Add a compact prerequisites/trust card using only established facts: one
-   public repository, no account, scanned code is not executed, and the result
-   is an automated snapshot rather than an audit. Do not copy the reference's
-   testimonials, usage counts, sign-in, pricing, booking links, or sales CTAs.
-4. Implement P1.5 radio choices inside the new card system. Optional context
-   must remain visibly optional and must not delay the repository scan.
-5. Render the `Repository -> Evidence -> Three actions` rail on intake,
-   processing, and report states. Every displayed phase must correspond to a
-   real application state; do not invent percentages, durations, or completed
-   phases.
-6. Recompose the report so the first viewport contains the repository label,
-   automated-snapshot qualifier, verdict, score/confidence/coverage summary,
-   and a clear route to the three actions. Keep the three actions prominent and
-   move domain detail and the evidence dossier into calm, accessible disclosure
-   cards below them.
-7. Keep `Download .md` and `New scan` available without using a large sticky
-   header that covers focused evidence. Preserve keyboard focus when opening a
-   supporting check and add the required scroll margin for sticky UI.
-8. Complete V.1 in the same change: prefer a line break after the repository
-   owner separator and retain emergency wrapping only for an overlong segment.
-9. Preserve safe evidence locations, all 13 SaaS checks, the three-action cap,
-   cancellation, error recovery, and every existing API/report contract.
-10. Update the Playwright journey to save desktop and 390 x 844 screenshots for
-    the landing, selected context, processing state, report summary, actions,
-    and evidence dossier.
-
-Acceptance:
-
-- The repository URL and primary Analyze action are visible in the first
-  desktop viewport and remain easy to reach at 390 x 844.
-- The visual hierarchy is value -> repository -> optional context -> progress
-  -> verdict -> three actions -> evidence; methodology never competes with the
-  first action.
-- The new theme uses a light neutral canvas, soft cards, restrained typography,
-  orange primary emphasis, and consistent spacing without copying Dreamlit or
-  Lovable branding.
-- The progress rail reports only real states and remains understandable without
-  color.
-- The report still exposes the same deterministic verdict, scores, coverage,
-  three actions, checks, privacy boundary, Markdown download, and new-scan
-  behavior.
-- The demo repository label renders as `scaleproof/` plus `demo-startup`; no
-  tested label or control creates horizontal overflow.
-- Keyboard navigation, focus visibility, semantic headings, disclosure
-  controls, form labels, contrast, reduced motion, and 44-pixel touch targets
-  remain valid.
-- No account, analytics, testimonial, contact capture, booking link, sales CTA,
-  copied asset, new font, or new runtime UI dependency is introduced.
-- Saved desktop and mobile screenshots show no covered content, clipped labels,
-  accidental horizontal scrolling, or inconsistent old-theme sections.
-- `npm run verify` passes.
-
-Validation:
-
-```bash
-npm run test:e2e
-npm run verify
-```
-
-### [ ] V.1 Keep repository labels readable on mobile
-
-At 390 x 844, `scaleproof/demo-startup` wraps as `scaleproof/d` plus
-`emo-startup` because the report title uses `overflow-wrap: anywhere`.
-
-Implementation:
-
-1. Add a preferred soft break after the GitHub owner separator.
-2. Keep an emergency break only for a genuinely overlong owner or repository
-   segment.
-3. Do not reduce the report title below the established mobile type scale.
-
-Acceptance:
-
-- The demo label renders as `scaleproof/` plus `demo-startup`.
-- Long labels cannot create horizontal overflow.
-- The saved 390 x 844 Playwright screenshot shows the corrected title and the
-  report download remains visible.
-
-Validation:
-
-```bash
-npm run test:e2e
-npm run verify
 ```
 
 ### [ ] P2.2 Complete external heuristic calibration
@@ -421,12 +221,12 @@ Acceptance:
 
 ## Verification baseline
 
-Verified on 2026-07-20 after the seventh implementation review:
+Verified on 2026-07-20 after closing P1.5 and P1.9:
 
 - Lint and TypeScript 6 and 7 passed.
-- `npm test`: 13 Vitest files / 113 tests passed.
+- `npm test`: 13 Vitest files / 119 tests passed.
 - `npm run build`: webpack production build passed.
-- `npm run test:e2e`: all 7 Playwright journeys passed from a fresh local
+- `npm run test:e2e`: all 9 Playwright journeys passed from a fresh local
   server lifecycle.
 - The focused implementation suite passed 45 tests and the independent
   SaaS-audit suite passed all 19 cases, including the evidence-cap,
@@ -437,6 +237,7 @@ Verified on 2026-07-20 after the seventh implementation review:
   `baseUrl` or inferred-`rootDir` migration defect.
 - The browser suite passed with an empty key and is protected from a dummy or
   ambient `OPENAI_API_KEY`.
-- Seven final-viewport screenshots were reviewed; V.1 is the only remaining
-  visual anomaly.
-- `git diff --check` passed.
+- Desktop and 390 x 844 browser artifacts were reviewed for landing, selected
+  context, processing, report summary, actions, and evidence. Keyboard focus is
+  visibly demonstrated, and report-section headings clear the sticky header.
+  P0.6 remains open for its required API/browser boundary test.

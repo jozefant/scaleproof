@@ -185,4 +185,33 @@ describe("founder action policy", () => {
     expect(selectDeterministicActions(checks).map((action) => action.remediationCode))
       .toEqual(["critical-a", "critical-b", "critical-c"]);
   });
+
+  it.each([
+    ["users_10x", "add-load-path"],
+    ["users_100x", "define-ha-path"],
+    ["engineering_team", "define-module-boundaries"],
+    ["users_and_team", "add-load-path"],
+  ] as const)("prioritizes %s actions for %s", (growthTarget, expectedCode) => {
+    const actions = selectDeterministicActions([
+      finding({ remediationCode: "add-load-path", severity: "medium" }),
+      finding({ remediationCode: "define-ha-path", severity: "medium" }),
+      finding({ remediationCode: "define-module-boundaries", severity: "medium" }),
+    ], growthTarget);
+
+    expect(actions[0].remediationCode).toBe(expectedCode);
+  });
+
+  it("keeps unknown and withheld target priorities neutral and critical work first", () => {
+    const checks = [
+      finding({ remediationCode: "remove-exposed-secret" }),
+      finding({ remediationCode: "define-module-boundaries", severity: "medium" }),
+      finding({ remediationCode: "add-load-path", severity: "medium" }),
+    ];
+
+    expect(selectDeterministicActions(checks, "unknown")).toEqual(
+      selectDeterministicActions(checks, "withheld"),
+    );
+    expect(selectDeterministicActions(checks, "engineering_team")[0].remediationCode)
+      .toBe("remove-exposed-secret");
+  });
 });

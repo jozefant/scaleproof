@@ -73,6 +73,12 @@
   box-shadow: var(--shadow);
 }
 
+.page :global(.dossier-cover h1),
+.page :global(.do-now h2),
+.page :global(.evidence-dossier h2) {
+  scroll-margin-top: 88px;
+}
+
 .page :global(.dossier-meta) {
   display: grid;
   grid-template-columns: 1fr auto auto auto;
@@ -736,6 +742,218 @@
   font-weight: 550;
 }
 
+/* Guided-utility treatment: summary and actions read as a short operating brief,
+   while detailed evidence remains available below without competing visually. */
+.header {
+  background: rgb(245 246 243 / 92%);
+  border-bottom-color: var(--rule-soft);
+}
+
+.secondaryButton {
+  min-height: 40px;
+  border-color: var(--rule);
+  border-radius: 9px;
+}
+
+.secondaryButton:hover {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--signal);
+}
+
+.page {
+  max-width: 1180px;
+}
+
+.page > :global(.journey-rail) {
+  max-width: 680px;
+  margin: 30px 42px 0;
+}
+
+.page :global(.dossier-cover) {
+  border-color: var(--rule-soft);
+  border-radius: var(--radius-large);
+  overflow: hidden;
+}
+
+.page :global(.dossier-meta) {
+  color: var(--muted);
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.page :global(.dossier-title) {
+  grid-template-columns: minmax(0, 1fr) 260px;
+  min-height: 330px;
+}
+
+.page :global(.dossier-title > div:first-child) {
+  padding: 46px;
+  border-right-color: var(--rule-soft);
+}
+
+.page :global(.dossier-title h1) {
+  overflow-wrap: break-word;
+  font-size: clamp(3rem, 6vw, 5.8rem);
+  line-height: 0.9;
+}
+
+.page :global(.dossier-title h1 a) {
+  text-decoration-color: var(--rule);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+.page :global(.snapshot-qualifier) {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 18px;
+  padding: 5px 8px;
+  color: var(--positive);
+  background: var(--positive-soft);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page :global(.disclaimer) {
+  margin-top: 8px;
+  border-color: var(--rule-soft);
+  border-radius: 999px;
+}
+
+.page :global(.verdict-stamp strong) {
+  padding: 0;
+  border: 0;
+  font-family: var(--display);
+  font-size: clamp(2.6rem, 4vw, 4.5rem);
+  letter-spacing: -0.06em;
+  transform: none;
+}
+
+.page :global(.score-rail),
+.page :global(.context-assumptions) {
+  border-top-color: var(--rule-soft);
+}
+
+.page :global(.score-rail > div),
+.page :global(.context-assumptions div) {
+  border-right-color: var(--rule-soft);
+}
+
+.page :global(.do-now) {
+  padding-bottom: 46px;
+}
+
+.page :global(.section-kicker) {
+  border-bottom-color: var(--rule-soft);
+}
+
+.page :global(.action-list) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  border-top: 0;
+}
+
+.page :global(.action-item) {
+  display: block;
+  min-height: 100%;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-large);
+  box-shadow: 0 7px 18px rgb(31 41 30 / 4%);
+}
+
+.page :global(.action-item:hover) {
+  background: var(--surface);
+  border-color: var(--signal);
+}
+
+.page :global(.action-rank) {
+  font-size: 31px;
+}
+
+.page :global(.action-item h3) {
+  margin-top: 9px;
+  font-size: 26px;
+}
+
+.page :global(.action-sources button),
+.page :global(.evidence-paths li) {
+  border-color: var(--rule-soft);
+  border-radius: 7px;
+}
+
+.page :global(.evidence-overview),
+.page :global(.bus-factor),
+.page :global(.scan-record) {
+  border-color: var(--rule-soft);
+  border-radius: var(--radius-large);
+  overflow: hidden;
+}
+
+.page :global(.chart-panel) {
+  border-right-color: var(--rule-soft);
+}
+
+.page :global(.evidence-dossier) {
+  background: var(--surface-subtle);
+  border-color: var(--rule-soft);
+}
+
+.page :global(.domain-accordions),
+.page :global(.domain-accordions details) {
+  border-color: var(--rule-soft);
+}
+
+.page :global(.domain-accordions summary) {
+  min-height: 64px;
+}
+
+.page :global(.check-table),
+.page :global(.check-row) {
+  border-color: var(--rule-soft);
+}
+
+.page :global(.scan-record > div) {
+  border-right-color: var(--rule-soft);
+}
+
+@media (max-width: 1050px) {
+  .page :global(.action-list) {
+    grid-template-columns: 1fr;
+  }
+
+  .page :global(.action-item) {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .page > :global(.journey-rail) {
+    margin: 22px 18px 0;
+  }
+
+  .page :global(.dossier-title h1) {
+    font-size: clamp(2.8rem, 15vw, 4.8rem);
+  }
+
+  .page :global(.snapshot-qualifier) {
+    margin-top: 14px;
+    font-size: 8px;
+  }
+
+  .page :global(.action-item) {
+    display: block;
+  }
+}
+
 @media (max-width: 1050px) {
   .page :global(.evidence-overview) {
     grid-template-columns: 1fr;
@@ -910,5 +1128,33 @@
 
   .page :global(.scan-record > div:nth-child(-n + 2)) {
     border-bottom: 1px solid var(--ink);
+  }
+}
+
+/* A verdict is a decision label, never decorative overflow. Keep every valid
+   verdict fully legible inside its own summary panel at every report width. */
+.page :global(.verdict-stamp) {
+  min-width: 0;
+  overflow: visible;
+}
+
+.page :global(.verdict-stamp strong) {
+  max-width: 100%;
+  font-size: clamp(2rem, 3.4vw, 3.4rem);
+  letter-spacing: -0.075em;
+  line-height: 0.95;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+@media (max-width: 1050px) and (min-width: 761px) {
+  .page :global(.dossier-title) {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.42fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .page :global(.verdict-stamp strong) {
+    font-size: clamp(2.25rem, 12vw, 3.4rem);
   }
 }

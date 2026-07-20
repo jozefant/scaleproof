@@ -2,7 +2,6 @@
 
 import {
   ArrowUpRight,
-  ChevronDown,
   GitFork,
 } from "lucide-react";
 import { FormEvent, useRef, useState } from "react";
@@ -17,6 +16,7 @@ import {
 } from "@/lib/report/contract";
 import styles from "./intake.module.css";
 import { IntakeError, ScanProgress } from "./intake-status";
+import { JourneyRail } from "./journey-rail";
 
 const DEFAULT_CONTEXT: ScanContext = {
   stage: "unknown",
@@ -59,6 +59,7 @@ function Question<T extends string>({
   value,
   options,
   onChange,
+  disabled,
 }: {
   id: string;
   number: string;
@@ -66,26 +67,35 @@ function Question<T extends string>({
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (value: T) => void;
+  disabled: boolean;
 }) {
   return (
-    <label className="question" htmlFor={id}>
-      <span className="question-number">{number}</span>
-      <span className="question-copy">{label}</span>
-      <span className="select-shell">
-        <select
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value as T)}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown aria-hidden="true" size={15} />
-      </span>
-    </label>
+    <fieldset className="question" disabled={disabled}>
+      <legend>
+        <span className="question-number">{number}</span>
+        <span className="question-copy">{label}</span>
+        <span className="question-optional">Optional</span>
+      </legend>
+      <div className="choice-grid">
+        {options.map((option) => {
+          const optionId = `${id}-${option.value}`;
+          return (
+            <label className="choice-card" htmlFor={optionId} key={option.value}>
+              <input
+                id={optionId}
+                name={id}
+                type="radio"
+                value={option.value}
+                checked={value === option.value}
+                onChange={() => onChange(option.value)}
+              />
+              <span className="choice-indicator" aria-hidden="true" />
+              <span>{option.label}</span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 
@@ -164,25 +174,23 @@ export function Intake({
       aria-labelledby="intake-title"
     >
       <div className="intake-heading">
-        <span>Repository intake</span>
-        <span>Public GitHub only</span>
+        <span>Start a readiness snapshot</span>
+        <span>Public GitHub repository</span>
       </div>
       <div className="intake-body">
-        <div className="panel-index" aria-hidden="true">
-          01
-        </div>
-        <h2 id="intake-title">Open the technical dossier.</h2>
+        <JourneyRail state={isLoading ? "scanning" : "intake"} />
+        <h2 id="intake-title">Start with the code you already have.</h2>
         <p className="intake-intro">
-          Add one public repository. Three optional answers improve the
-          prioritization, not the evidence.
+          Add one public repository. The context is optional and changes action
+          priority, never the evidence.
         </p>
 
         <form onSubmit={submit}>
-          <label className="repo-label" htmlFor="repository-url">
-            <GitFork aria-hidden="true" size={17} />
-            Public repository URL
-          </label>
-          <div className="repo-row">
+          <div className="repo-field">
+            <label className="repo-label" htmlFor="repository-url">
+              <GitFork aria-hidden="true" size={17} />
+              Public repository URL
+            </label>
             <input
               id="repository-url"
               type="url"
@@ -194,11 +202,11 @@ export function Intake({
               required
               disabled={isLoading}
             />
-            <button className="primary-button" type="submit" disabled={isLoading}>
-              {isLoading ? "Scanning" : "Analyze"}
-              <ArrowUpRight aria-hidden="true" size={17} />
-            </button>
           </div>
+          <button className="primary-button" type="submit" disabled={isLoading}>
+            {isLoading ? "Scanning" : "Analyze"}
+            <ArrowUpRight aria-hidden="true" size={17} />
+          </button>
           <p className="public-repository-warning">
             Public repositories only. Do not submit code that should not already
             be public.
@@ -211,6 +219,7 @@ export function Intake({
               label="What stage is the product at?"
               value={context.stage}
               options={STAGE_OPTIONS}
+              disabled={isLoading}
               onChange={(stage) =>
                 setContext((current) => ({ ...current, stage }))
               }
@@ -221,6 +230,7 @@ export function Intake({
               label="What kind of data does it handle?"
               value={context.dataSensitivity}
               options={DATA_OPTIONS}
+              disabled={isLoading}
               onChange={(dataSensitivity) =>
                 setContext((current) => ({ ...current, dataSensitivity }))
               }
@@ -231,12 +241,12 @@ export function Intake({
               label="What growth are you preparing for?"
               value={context.growthTarget}
               options={GROWTH_OPTIONS}
+              disabled={isLoading}
               onChange={(growthTarget) =>
                 setContext((current) => ({ ...current, growthTarget }))
               }
             />
           </div>
-
           {isLoading && (
             <ScanProgress
               startedAt={startedAt}
