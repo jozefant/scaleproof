@@ -63,10 +63,13 @@ project intentionally has no environment-file template.
 npm run verify
 ```
 
-The completion gate runs ESLint, TypeScript, Vitest, a production Next.js
-build, and Playwright founder-journey tests. Browser tests use the synthetic
-repository under [`fixtures/scaleproof-demo`](./fixtures/scaleproof-demo) and
-cannot use ambient OpenAI credentials.
+The completion gate runs ESLint, TypeScript 6 and 7 compatibility checks,
+Vitest, a production Next.js build, and Playwright founder-journey tests.
+TypeScript 7 is the application CLI checker; the TypeScript 6 compatibility
+package remains installed for Next.js and ESLint integrations that still need
+the compiler API. Browser tests use the synthetic repository under
+[`fixtures/scaleproof-demo`](./fixtures/scaleproof-demo) and cannot use ambient
+OpenAI credentials.
 
 ## How it works
 

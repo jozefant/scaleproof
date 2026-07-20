@@ -47,8 +47,10 @@ npm run verify
 ```
 
 `npm run verify` is the definition of technically done. It runs ESLint,
-TypeScript, Vitest, the production Next.js build, and Playwright. Run focused
-tests while iterating, then run the complete gate before handing off code.
+TypeScript 6 and 7 compatibility checks, Vitest, the production Next.js build,
+and Playwright. TypeScript 6 remains available for API-dependent tooling until
+the Next.js and ESLint toolchain can use the TypeScript 7 API. Run focused tests
+while iterating, then run the complete gate before handing off code.
 
 ## Non-negotiable rules
 

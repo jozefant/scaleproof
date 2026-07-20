@@ -306,10 +306,13 @@ Acceptance:
 
 ## Verification baseline
 
-Verified on 2026-07-19:
+Verified on 2026-07-20:
 
-- `npm run verify`: ESLint, TypeScript, 12 Vitest files / 91 tests, production
-  build, and 7 Playwright tests passed.
+- `npm run verify`: ESLint, TypeScript 6 and 7, 12 Vitest files / 92 tests,
+  production build, and 7 Playwright tests passed.
+- TypeScript 6.0.3 emitted no deprecation warnings. TypeScript 7.0.2 passed in
+  default and single-threaded modes; the `ts5to6` migration tool found no
+  `baseUrl` or inferred-`rootDir` migration defect.
 - The browser suite passed with an empty key and is protected from a dummy or
   ambient `OPENAI_API_KEY`.
 - Seven final-viewport screenshots were reviewed; V.1 is the only remaining
