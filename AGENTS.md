@@ -67,6 +67,10 @@ https://github.com/thorwebdev/lovable-supa-elevenlabs-voice-note
 https://github.com/ShenSeanChen/yt-Lovable-Supabase-GoogleAuth-Github
 https://github.com/NebeyouMusie/Healthcare-Landing-Page
 
+https://github.com/refactoringhq/tolaria/ - this for testing the file limit 
+https://github.com/Foundation-s-r-o/tech-demo-test - complex Java + React codebase
+
+
 Treat these as live network tests, not stable fixtures or CI dependencies. Do
 not copy their contents into this repository. For each requested run, record
 the test date, analyzed commit SHA when available, scan outcome, and anomalies.
