@@ -130,6 +130,29 @@ Repository acquisition, extraction, scanning, history, model input, output, and
 time are bounded. See the security and scoring authorities below for exact
 behaviour.
 
+## Screenshots
+
+Desktop-only captures from the synthetic demo repository. They contain no
+customer or third-party repository data. Regenerate the complete set with:
+
+```bash
+npm run capture:media
+```
+
+The command starts a dedicated local server on `127.0.0.1:3199`, clears
+`OPENAI_API_KEY`, runs the synthetic demo, validates all five images, then
+replaces only the named files below. Each image is a 1500 x 1000 PNG (3:2). Set
+`SCALEPROOF_CAPTURE_PORT` if that port is busy. Do not substitute a real
+repository or add mobile captures to this public gallery.
+
+| Screen | Media |
+| --- | --- |
+| Landing and GitHub URL intake | [Open PNG](./docs/media/scaleproof-landing.png) |
+| Completed report, three immediate actions, and Markdown download | [Open PNG](./docs/media/scaleproof-report-overview.png) |
+| Growth-readiness assessment | [Open PNG](./docs/media/scaleproof-growth-readiness.png) |
+| Knowledge concentration and estimated bus factor | [Open PNG](./docs/media/scaleproof-knowledge-concentration.png) |
+| Expanded evidence dossier | [Open PNG](./docs/media/scaleproof-evidence-dossier.png) |
+
 ## Documentation map
 
 These are the active sources of truth:
