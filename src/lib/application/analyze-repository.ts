@@ -1,6 +1,7 @@
 import {
   synthesizeFounderActions,
   type SynthesisInput,
+  type SynthesisRetryHandler,
   type SynthesisResult,
 } from "@/lib/ai/synthesis";
 import { analyzeSnapshot } from "@/lib/analysis/analyze";
@@ -15,7 +16,11 @@ import {
 } from "@/lib/report/contract";
 
 export interface AnalyzeRepositoryOptions {
-  synthesize?: (input: SynthesisInput) => Promise<SynthesisResult>;
+  synthesize?: (
+    input: SynthesisInput,
+    onRetry?: SynthesisRetryHandler,
+  ) => Promise<SynthesisResult>;
+  onSynthesisRetry?: SynthesisRetryHandler;
   signal?: AbortSignal;
 }
 
@@ -53,9 +58,7 @@ export async function analyzeRepository(
     draft.checks,
     context.growthTarget,
   );
-  const synthesis = await (
-    options.synthesize ?? synthesizeFounderActions
-  )({
+  const synthesisInput = {
     verdict: draft.verdict,
     score: draft.score,
     confidence: draft.confidence,
@@ -65,7 +68,12 @@ export async function analyzeRepository(
     checks: draft.checks,
     fallbackActions,
     signal: options.signal,
-  });
+  };
+  const synthesis = options.synthesize
+    ? await options.synthesize(synthesisInput, options.onSynthesisRetry)
+    : await synthesizeFounderActions(synthesisInput, {
+        onRetry: options.onSynthesisRetry,
+      });
 
   return parseAnalysisReport({
     schemaVersion: REPORT_SCHEMA_VERSION,

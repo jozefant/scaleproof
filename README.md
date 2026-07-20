@@ -50,12 +50,12 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000`. For a fast, credential-free walkthrough, click
-**Run the synthetic demo**. It exercises the complete report flow without
-contacting GitHub or OpenAI.
+Open `http://localhost:3000`. **Run the synthetic demo** uses the same mandatory
+GPT-5.6 ordering boundary as a public-repository scan; tests inject that
+boundary and never contact OpenAI.
 
-No OpenAI key is required. Without one, deterministic policy orders the founder
-actions. To enable GPT-5.6 ordering of allowlisted remediation codes:
+An OpenAI key is required to complete a scan. GPT-5.6 may order allowlisted
+remediation codes only; deterministic policy still owns the score and verdict:
 
 ```bash
 export OPENAI_API_KEY="..."
@@ -100,8 +100,11 @@ deterministic code: it calculates evidence, scores, verdicts, severity,
 evidence links, and displayed action copy without sending repository content to
 an AI model. Only after raw source material is cleared can GPT-5.6 receive a
 small categorical, allowlisted summary and propose the ordering of up to three
-remediation codes. Invalid, unavailable, or rejected model output falls back to
-the deterministic order.
+remediation codes. Invalid, unavailable, or rejected model output fails the
+scan without returning a partial report. During transient OpenAI failures, the
+analysis response streams a privacy-safe retry attempt count to the cancellable
+founder progress panel. That retry event contains no repository or assessment
+data.
 
 This separation keeps the factual result reproducible and makes the AI role
 useful but constrained: GPT-5.6 helps prioritize the existing remediation
@@ -129,14 +132,15 @@ flowchart TD
         E["Bounded temporary acquisition<br/>and anonymous history aggregation"]
         F["Deterministic controls and scoring"]
         G["Verdict, domain scores, growth labels,<br/>evidence-linked action candidates"]
-        N["Clear raw source content<br/>before optional AI"]
-        H{"GPT-5.6 enabled?"}
+        N["Clear raw source content<br/>before mandatory AI"]
+        H{"GPT-5.6 synthesis succeeds?"}
         I["Order allowlisted remediation codes<br/>categorical data only, store: false"]
         J["Validate and assemble<br/>versioned public report"]
+        Q["Return retry-safe no-report failure"]
         M["Delete temporary acquisition files"]
 
         C --> D --> E --> F --> G --> N --> H
-        H -- No --> J
+        H -- No --> Q
         H -- Yes --> I --> J
         E -. finally .-> M
     end

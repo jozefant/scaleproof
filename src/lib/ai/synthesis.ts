@@ -96,7 +96,30 @@ export interface SynthesisDependencies {
     payload: ModelPayload,
     signal?: AbortSignal,
   ) => Promise<ModelProposalResponse>;
+  sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  now?: () => number;
+  random?: () => number;
+  onRetry?: (attempt: number, delayMs: number) => void;
 }
+
+export type SynthesisRetryHandler = NonNullable<
+  SynthesisDependencies["onRetry"]
+>;
+
+export class MandatorySynthesisError extends Error {
+  constructor(
+    public readonly code: "synthesis_unavailable" | "synthesis_misconfigured",
+    message: string,
+  ) {
+    super(message);
+    this.name = "MandatorySynthesisError";
+  }
+}
+
+export const MAX_SYNTHESIS_ATTEMPTS = 6;
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
+const SYNTHESIS_DEADLINE_MS = 45_000;
+const ATTEMPT_TIMEOUT_MS = 8_000;
 
 function throwIfCancelled(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -199,26 +222,67 @@ export function buildAllowlistedPayload(input: SynthesisInput): {
   };
 }
 
-function fallbackResult(
-  input: SynthesisInput,
-  included: number,
-  total: number,
-  limited: boolean,
-  note: string,
-): SynthesisResult {
-  return {
-    actions: input.fallbackActions,
-    meta: {
-      source: "deterministic",
-      model: null,
-      findingsIncluded: included,
-      totalFindings: total,
-      inputTokens: null,
-      outputTokens: null,
-      limited,
-      note,
-    },
+function statusFor(error: unknown): number | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+  const candidate = error as {
+    status?: unknown;
+    response?: { status?: unknown };
   };
+  const status = candidate.status ?? candidate.response?.status;
+  return typeof status === "number" ? status : null;
+}
+
+function retryAfterMs(error: unknown, now: number): number | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+  const candidate = error as {
+    headers?: Headers | Record<string, string | undefined>;
+    response?: { headers?: Headers | Record<string, string | undefined> };
+  };
+  const headers = candidate.headers ?? candidate.response?.headers;
+  const value =
+    headers instanceof Headers
+      ? headers.get("retry-after")
+      : headers?.["retry-after"] ?? headers?.["Retry-After"];
+  if (!value) {
+    return null;
+  }
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1_000);
+  }
+  const date = Date.parse(value);
+  return Number.isFinite(date) && date > now ? date - now : null;
+}
+
+function isTransient(error: unknown): boolean {
+  const status = statusFor(error);
+  return status === null || status === 408 || status === 429 || status >= 500;
+}
+
+function unusableResponse(message: string): MandatorySynthesisError {
+  return new MandatorySynthesisError("synthesis_unavailable", message);
+}
+
+async function sleepWithAbort(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  throwIfCancelled(signal);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, milliseconds);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("The repository scan was cancelled.", "AbortError"));
+    }, { once: true });
+  });
+  throwIfCancelled(signal);
+}
+
+function attemptSignal(signal?: AbortSignal): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)].filter(
+    (candidate): candidate is AbortSignal => Boolean(candidate),
+  ));
 }
 
 export async function synthesizeFounderActions(
@@ -227,75 +291,79 @@ export async function synthesizeFounderActions(
 ): Promise<SynthesisResult> {
   throwIfCancelled(input.signal);
   const built = buildAllowlistedPayload(input);
-  if (!process.env.OPENAI_API_KEY || built.total === 0) {
-    return fallbackResult(
-      input,
-      built.included,
-      built.total,
-      built.limited,
-      process.env.OPENAI_API_KEY
-        ? "No actionable findings required model synthesis."
-        : "OPENAI_API_KEY is not configured; deterministic priorities were used.",
+  if (!dependencies.requestProposal && !process.env.OPENAI_API_KEY) {
+    throw new MandatorySynthesisError(
+      "synthesis_misconfigured",
+      "Mandatory GPT synthesis is not configured. Try again after OpenAI is available.",
     );
   }
-
-  try {
-    throwIfCancelled(input.signal);
-    const response = await (
-      dependencies.requestProposal ?? requestOpenAiProposal
-    )(built.payload, input.signal);
-    throwIfCancelled(input.signal);
-    const parsed = response.parsed;
-    if (!parsed) {
-      return fallbackResult(
-        input,
-        built.included,
-        built.total,
-        built.limited,
-        "GPT-5.6 did not return a usable structured result; deterministic priorities were used.",
-      );
-    }
-
-    const actions = reconcileActionProposal(
-      input.fallbackActions,
-      parsed.actions,
-      mandatoryRemediationCodes(input.checks),
-    );
-    if (!actions) {
-      return fallbackResult(
-        input,
-        built.included,
-        built.total,
-        built.limited,
-        "GPT-5.6 omitted mandatory work, duplicated actions, or returned an unsupported remediation; deterministic priorities were used.",
-      );
-    }
-
-    return {
-      actions,
-      meta: {
-        source: "gpt-5.6",
-        model: response.model,
-        findingsIncluded: built.included,
-        totalFindings: built.total,
-        inputTokens: response.inputTokens ?? built.estimatedTokens,
-        outputTokens: response.outputTokens,
-        limited: built.limited,
-        note: built.limited
-          ? `AI synthesis used ${built.included} of ${built.total} actionable findings; the deterministic score used all findings.`
-          : "AI synthesis used every actionable finding in the allowlisted payload.",
-      },
-    };
-  } catch {
-    throwIfCancelled(input.signal);
-    return fallbackResult(
-      input,
-      built.included,
-      built.total,
-      built.limited,
-      "GPT-5.6 synthesis was unavailable; deterministic priorities were used without exposing repository content.",
-    );
+  if (built.total === 0) {
+    throw unusableResponse("Mandatory GPT synthesis received no actionable findings.");
   }
+
+  const requestProposal = dependencies.requestProposal ?? requestOpenAiProposal;
+  const sleep = dependencies.sleep ?? sleepWithAbort;
+  const now = dependencies.now ?? Date.now;
+  const random = dependencies.random ?? Math.random;
+  const deadline = now() + SYNTHESIS_DEADLINE_MS;
+
+  for (let attempt = 1; attempt <= MAX_SYNTHESIS_ATTEMPTS; attempt += 1) {
+    try {
+      throwIfCancelled(input.signal);
+      const response = await requestProposal(built.payload, attemptSignal(input.signal));
+      throwIfCancelled(input.signal);
+      if (!response.parsed) {
+        throw unusableResponse("GPT-5.6 returned no usable structured result.");
+      }
+      const actions = reconcileActionProposal(
+        input.fallbackActions,
+        response.parsed.actions,
+        mandatoryRemediationCodes(input.checks),
+      );
+      if (!actions) {
+        throw unusableResponse("GPT-5.6 returned unsupported mandatory priorities.");
+      }
+      return {
+        actions,
+        meta: {
+          source: "gpt-5.6",
+          model: response.model,
+          findingsIncluded: built.included,
+          totalFindings: built.total,
+          inputTokens: response.inputTokens ?? built.estimatedTokens,
+          outputTokens: response.outputTokens,
+          limited: built.limited,
+          note: built.limited
+            ? `AI synthesis used ${built.included} of ${built.total} actionable findings; the deterministic score used all findings.`
+            : "AI synthesis used every actionable finding in the allowlisted payload.",
+        },
+      };
+    } catch (error) {
+      throwIfCancelled(input.signal);
+      if (!isTransient(error) || attempt === MAX_SYNTHESIS_ATTEMPTS) {
+        throw error instanceof MandatorySynthesisError
+          ? error
+          : new MandatorySynthesisError(
+              "synthesis_unavailable",
+              "OpenAI could not complete mandatory synthesis. Try the scan again.",
+            );
+      }
+      const remaining = deadline - now();
+      const requestedDelay = retryAfterMs(error, now());
+      const baseDelay = requestedDelay ?? RETRY_DELAYS_MS[attempt - 1];
+      const delay = requestedDelay ?? Math.round(baseDelay * (0.8 + random() * 0.4));
+      if (remaining <= delay) {
+        throw new MandatorySynthesisError(
+          "synthesis_unavailable",
+          "OpenAI could not complete mandatory synthesis before the scan deadline. Try again.",
+        );
+      }
+      dependencies.onRetry?.(attempt + 1, delay);
+      await sleep(delay, input.signal);
+    }
+  }
+
+  throw new MandatorySynthesisError("synthesis_unavailable", "OpenAI synthesis is unavailable.");
 }
 
 async function requestOpenAiProposal(

@@ -30,75 +30,6 @@ npm run test:e2e
 npm run verify
 ```
 
-### [ ] P0.7 Proposed: make GPT synthesis mandatory with bounded retries
-
-Current behaviour is a successful deterministic fallback when OpenAI is not
-configured, cannot be reached, times out, or returns an unusable response. The
-following proposed policy would instead require usable GPT synthesis before a
-scan can complete; it is not current product behaviour.
-
-GPT remains forbidden from changing the deterministic checks, score, verdict,
-severity, evidence, or displayed action copy. If mandatory synthesis cannot be
-completed, fail the scan and return no report rather than implying that GPT
-produced or validated the score.
-
-Implementation:
-
-1. Replace the successful synthesis fallback with a typed mandatory-synthesis
-   failure. A missing API key or permanent authentication/configuration error
-   must fail fast.
-2. For transient network errors, timeouts, HTTP `408`, `429`, `5xx`, or an
-   unusable structured response, make one initial request plus five retries,
-   for at most six total attempts.
-3. Use abort-aware exponential backoff of approximately `1s`, `2s`, `4s`,
-   `8s`, and `16s`, with bounded jitter. Honor a valid `Retry-After` value
-   without exceeding the request deadline.
-4. Bound each attempt and the complete retry budget so the route stays within
-   its 120-second duration limit. Cancellation must stop the active request,
-   pending backoff, and all future attempts immediately.
-5. After the first transient failure, show a privacy-safe founder message such
-   as `OpenAI is temporarily unavailable; retrying mandatory synthesis
-   (attempt 2 of 6).` Do not reacquire or rescan the repository between
-   synthesis attempts.
-6. If all six attempts fail, return a typed `503` response such as
-   `synthesis_unavailable` and tell the founder that OpenAI could not be reached
-   and the scan must be tried again. Do not return the internally calculated
-   draft score or a partial report.
-7. Preserve the existing allowlisted payload, token limits, `store: false`,
-   raw-source release before synthesis, and privacy-safe logging rules.
-8. Keep verification isolated from live OpenAI. Inject request, sleep, clock,
-   and test-synthesis boundaries so unit, API, and Playwright tests are
-   deterministic and never use ambient credentials or external network calls.
-9. Update `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, and `SCORING.md` to
-   remove deterministic-fallback claims and document that GPT synthesis is a
-   mandatory report-completion dependency, not the scoring authority.
-
-Acceptance:
-
-- Five transient failures followed by a successful sixth attempt return a
-  schema-valid report with GPT-ordered allowlisted actions.
-- Six transient failures return `503 synthesis_unavailable`, no report, and a
-  clear founder-facing retry message.
-- Missing credentials and non-retryable `4xx` errors fail without pointless
-  backoff.
-- The UI exposes retry progress after the first transient failure and remains
-  cancellable throughout the retry window.
-- Cancellation during a request or backoff produces no further attempts and
-  still guarantees repository cleanup.
-- Critical mandatory remediation cannot be omitted or replaced by GPT.
-- Tests prove the retry count, backoff sequence, deadline cap, `Retry-After`,
-  malformed-response handling, cancellation, final error mapping, and
-  successful last-attempt recovery without making a live OpenAI request.
-- `npm run verify` passes with no usable ambient `OPENAI_API_KEY`.
-
-Validation:
-
-```bash
-npm test -- src/lib/ai/synthesis.test.ts src/app/api/analyze/route.test.ts
-npm run test:e2e
-OPENAI_API_KEY= npm run verify
-```
-
 ### [ ] P2.2 Complete external heuristic calibration
 
 The automated suite already protects six synthetic golden scenarios: strong
@@ -187,12 +118,12 @@ Acceptance:
 
 ## Verification baseline
 
-Verified on 2026-07-20 after closing P1.5 and P1.9:
+Verified on 2026-07-20 after closing P1.5, P1.9, and P0.7:
 
 - Lint and TypeScript 6 and 7 passed.
-- `npm test`: 13 Vitest files / 119 tests passed.
+- `npm test`: 13 Vitest files / 125 tests passed.
 - `npm run build`: webpack production build passed.
-- `npm run test:e2e`: all 9 Playwright journeys passed from a fresh local
+- `npm run test:e2e`: all 10 Playwright journeys passed from a fresh local
   server lifecycle.
 - The focused implementation suite passed 45 tests and the independent
   SaaS-audit suite passed all 19 cases, including the evidence-cap,
@@ -205,5 +136,6 @@ Verified on 2026-07-20 after closing P1.5 and P1.9:
   ambient `OPENAI_API_KEY`.
 - Desktop and 390 x 844 browser artifacts were reviewed for landing, selected
   context, processing, report summary, actions, and evidence. Keyboard focus is
-  visibly demonstrated, and report-section headings clear the sticky header.
-  P0.6 remains open for its required API/browser boundary test.
+  visibly demonstrated, report-section headings clear the sticky header, and
+  the mandatory-synthesis retry artifact shows its real attempt count plus the
+  cancel control. P0.6 remains open for its required API/browser boundary test.

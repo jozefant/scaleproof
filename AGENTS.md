@@ -25,7 +25,7 @@ more than three immediate actions.
 | `src/components` | Founder-facing interface and report presentation |
 | `src/lib/repository` | Strict GitHub acquisition, scanning, and anonymous history aggregation |
 | `src/lib/analysis` | Deterministic controls, scoring, caps, evidence, and action candidates |
-| `src/lib/ai` | Allowlisted GPT-5.6 synthesis with deterministic fallback |
+| `src/lib/ai` | Mandatory allowlisted GPT-5.6 synthesis with bounded retries |
 | `src/lib/application` | Analysis orchestration and raw-content release before synthesis |
 | `src/lib/report` | Public report contract and Markdown rendering |
 | `fixtures/scaleproof-demo` | Synthetic, stable end-to-end analysis fixture |
@@ -90,7 +90,7 @@ the test date, analyzed commit SHA when available, scan outcome, and anomalies.
   contributor identities, secrets, or personal data.
 - The deterministic engine owns scores, verdicts, and displayed action copy.
   GPT-5.6 may only propose the order of up to three allowlisted remediation
-  codes.
+  codes; synthesis failure returns no report rather than a deterministic fallback.
 - Preserve explicit evidence states: verified, documented, configured, inferred,
   missing, insufficient, and not applicable. Absence of evidence is not proof
   that an operational control fails.

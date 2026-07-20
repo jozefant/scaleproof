@@ -52,6 +52,86 @@ const GROWTH_OPTIONS: Array<{ value: GrowthTarget; label: string }> = [
   { value: "withheld", label: "Prefer not to say" },
 ];
 
+function responseError(payload: unknown): Error {
+  return new Error(
+    typeof payload === "object" &&
+      payload !== null &&
+      "error" in payload &&
+      typeof payload.error === "string"
+      ? payload.error
+      : "The scan could not be completed.",
+  );
+}
+
+async function readAnalysisResponse(
+  response: Response,
+  onRetry: (attempt: number, maxAttempts: number) => void,
+): Promise<unknown> {
+  if (
+    !response.headers
+      .get("content-type")
+      ?.includes("application/x-ndjson")
+  ) {
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      throw responseError(payload);
+    }
+    return payload;
+  }
+  if (!response.body) {
+    throw new Error("The scan progress stream was unavailable.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let report: unknown;
+
+  const consumeLine = (line: string): void => {
+    if (!line.trim()) {
+      return;
+    }
+    const event: unknown = JSON.parse(line);
+    if (typeof event !== "object" || event === null || !("type" in event)) {
+      throw new Error("The scan returned an invalid progress event.");
+    }
+    if (
+      event.type === "synthesis_retry" &&
+      "attempt" in event &&
+      typeof event.attempt === "number" &&
+      "maxAttempts" in event &&
+      typeof event.maxAttempts === "number"
+    ) {
+      onRetry(event.attempt, event.maxAttempts);
+      return;
+    }
+    if (event.type === "report" && "report" in event) {
+      report = event.report;
+      return;
+    }
+    if (event.type === "error") {
+      throw responseError(event);
+    }
+    throw new Error("The scan returned an unsupported progress event.");
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    lines.forEach(consumeLine);
+    if (done) {
+      break;
+    }
+  }
+  consumeLine(buffer);
+  if (report === undefined) {
+    throw new Error("The scan ended before a report was completed.");
+  }
+  return report;
+}
+
 function Question<T extends string>({
   id,
   number,
@@ -108,6 +188,10 @@ export function Intake({
   const [context, setContext] = useState<ScanContext>(DEFAULT_CONTEXT);
   const [isLoading, setIsLoading] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [synthesisRetry, setSynthesisRetry] = useState<{
+    attempt: number;
+    maxAttempts: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortController = useRef<AbortController | null>(null);
 
@@ -116,11 +200,15 @@ export function Intake({
     abortController.current = controller;
     setIsLoading(true);
     setStartedAt(Date.now());
+    setSynthesisRetry(null);
     setError(null);
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Accept: "application/x-ndjson",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           source,
           repositoryUrl:
@@ -129,17 +217,11 @@ export function Intake({
         }),
         signal: controller.signal,
       });
-      const payload: unknown = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof payload === "object" &&
-            payload !== null &&
-            "error" in payload &&
-            typeof payload.error === "string"
-            ? payload.error
-            : "The scan could not be completed.",
-        );
-      }
+      const payload = await readAnalysisResponse(
+        response,
+        (attempt, maxAttempts) =>
+          setSynthesisRetry({ attempt, maxAttempts }),
+      );
       const parsed = safeParseAnalysisReport(payload);
       if (!parsed.success) {
         throw new Error(
@@ -160,6 +242,7 @@ export function Intake({
       abortController.current = null;
       setIsLoading(false);
       setStartedAt(null);
+      setSynthesisRetry(null);
     }
   }
 
@@ -250,6 +333,7 @@ export function Intake({
           {isLoading && (
             <ScanProgress
               startedAt={startedAt}
+              synthesisRetry={synthesisRetry}
               onCancel={() => abortController.current?.abort()}
             />
           )}

@@ -6,19 +6,20 @@ import { AnalysisReportSchema, REPORT_SCHEMA_VERSION } from "./contract";
 import { escapeMarkdownProse, renderMarkdownReport } from "./markdown";
 
 async function demoReport() {
-  const previousKey = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  try {
-    return await analyzeRepository(await acquireDemoRepository(), {
+  return analyzeRepository(await acquireDemoRepository(), {
       stage: "unknown",
       dataSensitivity: "unknown",
       growthTarget: "unknown",
+    }, {
+      synthesize: async (input) => ({
+        actions: input.fallbackActions,
+        meta: {
+          source: "gpt-5.6", model: "gpt-5.6-test", findingsIncluded: input.fallbackActions.length,
+          totalFindings: input.fallbackActions.length, inputTokens: null, outputTokens: null,
+          limited: false, note: "Injected mandatory synthesis.",
+        },
+      }),
     });
-  } finally {
-    if (previousKey) {
-      process.env.OPENAI_API_KEY = previousKey;
-    }
-  }
 }
 
 describe("public report contract", () => {

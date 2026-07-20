@@ -28,7 +28,7 @@ does not retain scan history.
 | `src/lib/repository` | Strict GitHub URL parsing, temporary acquisition, text scanning, stack detection, anonymous history aggregation | Repository types and repository-owned limits |
 | `src/lib/analysis` | Signals, controls, scoring, SaaS 10x audit lens, verdicts, 10x/100x/team/agent assessments | No UI or OpenAI client |
 | `src/lib/ai` | Allowlisted payload, token budget, structured action proposal, deterministic reconciliation | Analysis draft and public action types |
-| `src/lib/application` | Deterministic orchestration, raw-content release, optional synthesis, and report assembly | Repository, analysis, AI, and report contract |
+| `src/lib/application` | Deterministic orchestration, raw-content release, mandatory synthesis, and report assembly | Repository, analysis, AI, and report contract |
 | `src/lib/report` | Versioned Zod contract, shared labels, and pure Markdown rendering | Public analysis and repository result types |
 | `src/app/api` | Request validation, status mapping, no-store response boundary | Application orchestrator only |
 | `src/components` | Intake, founder report sections, colocated CSS modules, chart, evidence dossier, and download handoff | Public report contract only |
@@ -97,7 +97,8 @@ work concurrently:
 | Scan file/text/time limit reached | Return a visibly partial report and cap the verdict |
 | Client cancellation | Abort GitHub reads, deterministic traversal, and in-flight synthesis, then delete temporary data |
 | GitHub history rate limit | Keep completed aggregates, stop further module requests, and continue with a privacy-safe `rate_limited` history reason |
-| GPT unavailable, invalid, or over budget | Use deterministic actions without changing the score |
+| GPT transiently unavailable or invalid | Stream a privacy-safe retry count to the cancellable founder UI; never reacquire the repository |
+| GPT unavailable after the bounded retry budget | Return a retry-safe no-report failure without exposing the deterministic draft |
 | Unexpected analysis failure | Return a generic no-retention error and run cleanup |
 
 ## Deliberate non-goals

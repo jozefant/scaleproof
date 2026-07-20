@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import {
+  MAX_SYNTHESIS_ATTEMPTS,
+  MandatorySynthesisError,
+  type SynthesisInput,
+  type SynthesisRetryHandler,
+  type SynthesisResult,
+} from "@/lib/ai/synthesis";
 import { analyzeRepository } from "@/lib/application/analyze-repository";
 import { acquireDemoRepository } from "@/lib/repository/demo";
 import {
@@ -69,19 +76,42 @@ export interface AnalyzeRouteDependencies {
     snapshot: RepositorySnapshot,
     context: ScanContext,
     signal?: AbortSignal,
+    onSynthesisRetry?: SynthesisRetryHandler,
   ) => Promise<AnalysisReport>;
+}
+
+function testMandatorySynthesis(input: SynthesisInput): Promise<SynthesisResult> {
+  return Promise.resolve({
+    actions: input.fallbackActions,
+    meta: {
+      source: "gpt-5.6",
+      model: "gpt-5.6-test-boundary",
+      findingsIncluded: input.fallbackActions.length,
+      totalFindings: input.fallbackActions.length,
+      inputTokens: null,
+      outputTokens: null,
+      limited: false,
+      note: "Injected mandatory synthesis completed in the browser test boundary.",
+    },
+  });
 }
 
 const DEFAULT_DEPENDENCIES: AnalyzeRouteDependencies = {
   acquireDemo: acquireDemoRepository,
   acquirePublic: acquirePublicRepository,
-  analyze: (snapshot, context, signal) =>
-    analyzeRepository(snapshot, context, { signal }),
+  analyze: (snapshot, context, signal, onSynthesisRetry) =>
+    analyzeRepository(snapshot, context, {
+      signal,
+      onSynthesisRetry,
+      synthesize:
+        process.env.PLAYWRIGHT_TEST === "1" ? testMandatorySynthesis : undefined,
+    }),
 };
 
 export async function handleAnalyzeRequest(
   request: Request,
   dependencies: AnalyzeRouteDependencies = DEFAULT_DEPENDENCIES,
+  onSynthesisRetry?: SynthesisRetryHandler,
 ): Promise<Response> {
   try {
     const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -134,6 +164,7 @@ export async function handleAnalyzeRequest(
       snapshot,
       parsed.data.context,
       request.signal,
+      onSynthesisRetry,
     );
     return Response.json(report, {
       status: 200,
@@ -173,6 +204,17 @@ export async function handleAnalyzeRequest(
       );
     }
 
+    if (error instanceof MandatorySynthesisError) {
+      return Response.json(
+        {
+          error:
+            "OpenAI could not complete the required action prioritization. Try this scan again.",
+          code: "synthesis_unavailable",
+        },
+        { status: 503, headers: noStoreHeaders() },
+      );
+    }
+
     return Response.json(
       {
         error:
@@ -181,4 +223,116 @@ export async function handleAnalyzeRequest(
       { status: 500, headers: noStoreHeaders() },
     );
   }
+}
+
+type AnalyzeStreamEvent =
+  | {
+      type: "synthesis_retry";
+      attempt: number;
+      maxAttempts: number;
+      delayMs: number;
+    }
+  | { type: "report"; report: unknown }
+  | { type: "error"; status: number; error: string; code?: string };
+
+function streamHeaders(): HeadersInit {
+  return {
+    "Cache-Control": "no-store, max-age=0",
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  };
+}
+
+export function streamAnalyzeRequest(
+  request: Request,
+  dependencies: AnalyzeRouteDependencies = DEFAULT_DEPENDENCIES,
+): Response {
+  const encoder = new TextEncoder();
+  const operation = new AbortController();
+  const forwardCancellation = () =>
+    operation.abort(
+      request.signal.reason ??
+        new DOMException("The repository scan was cancelled.", "AbortError"),
+    );
+  if (request.signal.aborted) {
+    forwardCancellation();
+  } else {
+    request.signal.addEventListener("abort", forwardCancellation, {
+      once: true,
+    });
+  }
+  const analysisRequest = new Request(request, { signal: operation.signal });
+  let open = true;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: AnalyzeStreamEvent): void => {
+        if (open) {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        }
+      };
+
+      void handleAnalyzeRequest(
+        analysisRequest,
+        dependencies,
+        (attempt, delayMs) => {
+          send({
+            type: "synthesis_retry",
+            attempt,
+            maxAttempts: MAX_SYNTHESIS_ATTEMPTS,
+            delayMs,
+          });
+        },
+      )
+        .then(async (response) => {
+          const payload: unknown = await response.json();
+          if (response.ok) {
+            send({ type: "report", report: payload });
+            return;
+          }
+          const safePayload =
+            typeof payload === "object" && payload !== null
+              ? (payload as { error?: unknown; code?: unknown })
+              : {};
+          send({
+            type: "error",
+            status: response.status,
+            error:
+              typeof safePayload.error === "string"
+                ? safePayload.error
+                : "The scan could not be completed.",
+            code:
+              typeof safePayload.code === "string"
+                ? safePayload.code
+                : undefined,
+          });
+        })
+        .catch(() => {
+          send({
+            type: "error",
+            status: 500,
+            error:
+              "Scaleproof could not complete this scan. No repository content was retained.",
+          });
+        })
+        .finally(() => {
+          request.signal.removeEventListener("abort", forwardCancellation);
+          if (open) {
+            open = false;
+            controller.close();
+          }
+        });
+    },
+    cancel() {
+      open = false;
+      operation.abort(
+        new DOMException("The repository scan was cancelled.", "AbortError"),
+      );
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: streamHeaders(),
+  });
 }

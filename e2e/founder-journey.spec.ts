@@ -338,3 +338,74 @@ test("cancel returns the preserved form to a usable state without an alert", asy
   );
   releaseRequest?.();
 });
+
+test("shows real mandatory synthesis retry progress before the report", async ({
+  page,
+  request,
+}, testInfo) => {
+  const report = await demoReport(request);
+  await page.addInitScript((mockReport) => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      if (!url.endsWith("/api/analyze")) {
+        return originalFetch(input, init);
+      }
+
+      const encoder = new TextEncoder();
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `${JSON.stringify({
+                  type: "synthesis_retry",
+                  attempt: 2,
+                  maxAttempts: 6,
+                  delayMs: 1_000,
+                })}\n`,
+              ),
+            );
+            window.setTimeout(() => {
+              controller.enqueue(
+                encoder.encode(
+                  `${JSON.stringify({ type: "report", report: mockReport })}\n`,
+                ),
+              );
+              controller.close();
+            }, 750);
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+          },
+        },
+      );
+    };
+  }, report);
+
+  await page.goto("/");
+  await page
+    .getByLabel("Public repository URL")
+    .fill("https://github.com/example/repository");
+  await page.getByRole("button", { name: "Analyze" }).click();
+
+  await expect(page.getByText("OpenAI retry 2 of 6")).toBeVisible();
+  await expect(page.locator(".scan-progress")).toContainText(
+    "Repository scan complete · retrying mandatory action prioritization",
+  );
+  await expect(page.getByRole("button", { name: "Cancel scan" })).toBeVisible();
+  await page.locator(".scan-progress").scrollIntoViewIfNeeded();
+  await expect(page.locator(".scan-progress")).toBeInViewport();
+  await page.screenshot({
+    path: testInfo.outputPath("synthesis-retry-progress.png"),
+  });
+  await expect(page.getByText("Technical readiness dossier")).toBeVisible();
+});

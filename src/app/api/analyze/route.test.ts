@@ -7,6 +7,7 @@ import {
 } from "@/lib/repository/github";
 import {
   handleAnalyzeRequest,
+  streamAnalyzeRequest,
   type AnalyzeRouteDependencies,
 } from "@/lib/application/analyze-route";
 
@@ -35,14 +36,14 @@ async function analyzeWithoutExternalServices(
     synthesize: async (input) => ({
       actions: input.fallbackActions,
       meta: {
-        source: "deterministic",
-        model: null,
+        source: "gpt-5.6",
+        model: "gpt-5.6-test",
         findingsIncluded: input.fallbackActions.length,
         totalFindings: input.fallbackActions.length,
         inputTokens: null,
         outputTokens: null,
         limited: false,
-        note: "External synthesis is disabled in tests.",
+        note: "Injected mandatory synthesis completed in tests.",
       },
     }),
   });
@@ -108,8 +109,7 @@ describe("POST /api/analyze contract", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 
-  it("returns a schema-valid deterministic fallback report", async () => {
-    process.env.OPENAI_API_KEY = "dummy-key-must-not-be-used";
+  it("returns a schema-valid report after injected mandatory synthesis", async () => {
     const response = await handleAnalyzeRequest(
       request({ source: "demo", context }),
       dependencies(),
@@ -120,9 +120,71 @@ describe("POST /api/analyze contract", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(report).toMatchObject({
       schemaVersion: "1.0.0",
-      ai: { source: "deterministic" },
+      ai: { source: "gpt-5.6" },
     });
     expect(report.actions.length).toBeLessThanOrEqual(3);
+  });
+
+  it("maps mandatory synthesis failure to a no-report 503", async () => {
+    const response = await handleAnalyzeRequest(
+      request({ source: "demo", context }),
+      dependencies({
+        analyze: async () => {
+          const { MandatorySynthesisError } = await import("@/lib/ai/synthesis");
+          throw new MandatorySynthesisError("synthesis_unavailable", "unavailable");
+        },
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "OpenAI could not complete the required action prioritization. Try this scan again.",
+      code: "synthesis_unavailable",
+    });
+  });
+
+  it("streams privacy-safe synthesis retry progress before the report", async () => {
+    const response = streamAnalyzeRequest(
+      request({ source: "demo", context }),
+      dependencies({
+        analyze: async (
+          snapshot,
+          scanContext,
+          signal,
+          onSynthesisRetry,
+        ) => {
+          onSynthesisRetry?.(2, 1_000);
+          return analyzeWithoutExternalServices(
+            snapshot,
+            scanContext,
+            signal,
+          );
+        },
+      }),
+    );
+    const events = (await response.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain(
+      "application/x-ndjson",
+    );
+    expect(events[0]).toEqual({
+      type: "synthesis_retry",
+      attempt: 2,
+      maxAttempts: 6,
+      delayMs: 1_000,
+    });
+    expect(events[1]).toMatchObject({
+      type: "report",
+      report: {
+        schemaVersion: "1.0.0",
+        ai: { source: "gpt-5.6" },
+      },
+    });
   });
 
   it("preserves partial-scan output through the public contract", async () => {

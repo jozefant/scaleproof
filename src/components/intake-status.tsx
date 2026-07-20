@@ -2,17 +2,25 @@ import { AlertTriangle, Ban } from "lucide-react";
 
 export function ScanProgress({
   startedAt,
+  synthesisRetry,
   onCancel,
 }: {
   startedAt: number | null;
+  synthesisRetry: { attempt: number; maxAttempts: number } | null;
   onCancel: () => void;
 }) {
   return (
     <div className="scan-progress" aria-live="polite">
       <div>
-        <span>Scanning repository</span>
+        <span>
+          {synthesisRetry
+            ? `OpenAI retry ${synthesisRetry.attempt} of ${synthesisRetry.maxAttempts}`
+            : "Scanning repository"}
+        </span>
         <small>
-          Indeterminate progress · 90-second analysis limit
+          {synthesisRetry
+            ? "Repository scan complete · retrying mandatory action prioritization"
+            : "Indeterminate progress · 90-second analysis limit"}
           {startedAt
             ? ` · started ${new Date(startedAt).toLocaleTimeString("en-GB")}`
             : ""}

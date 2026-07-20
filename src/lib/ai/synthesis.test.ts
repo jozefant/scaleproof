@@ -138,33 +138,140 @@ describe("OpenAI synthesis boundary", () => {
         ],
       },
     },
-  ])("falls back for $name", async ({ parsed }) => {
-    process.env.OPENAI_API_KEY = "dummy";
+  ])("retries and fails closed for $name", async ({ parsed }) => {
     const input = synthesisInput();
-    const result = await synthesizeFounderActions(input, {
-      requestProposal: async () => ({
-        parsed,
-        model: "gpt-5.6",
-        inputTokens: null,
-        outputTokens: null,
-      }),
+    const requestProposal = vi.fn(async () => ({
+      parsed,
+      model: "gpt-5.6",
+      inputTokens: null,
+      outputTokens: null,
+    }));
+    await expect(synthesizeFounderActions(input, {
+      requestProposal,
+      sleep: async () => undefined,
+      now: () => 0,
+      random: () => 0.5,
+    })).rejects.toMatchObject({
+      code: "synthesis_unavailable",
     });
-
-    expect(result.meta.source).toBe("deterministic");
-    expect(result.actions).toEqual(input.fallbackActions);
+    expect(requestProposal).toHaveBeenCalledTimes(6);
   });
 
-  it("falls back when the model boundary fails", async () => {
-    process.env.OPENAI_API_KEY = "dummy";
+  it("retries five transient failures and succeeds on the sixth attempt", async () => {
     const input = synthesisInput();
+    const sleep = vi.fn(async () => undefined);
+    const requestProposal = vi.fn(async () => {
+      if (requestProposal.mock.calls.length < 6) {
+        throw Object.assign(new Error("network unavailable"), { status: 503 });
+      }
+      return {
+        parsed: { actions: [{ remediationCode: "remove-exposed-secret" }] },
+        model: "gpt-5.6",
+        inputTokens: 100,
+        outputTokens: 10,
+      };
+    });
     const result = await synthesizeFounderActions(input, {
-      requestProposal: async () => {
-        throw new Error("network unavailable");
-      },
+      requestProposal,
+      sleep,
+      now: () => 0,
+      random: () => 0.5,
     });
 
-    expect(result.meta.source).toBe("deterministic");
-    expect(result.actions).toEqual(input.fallbackActions);
+    expect(result.meta.source).toBe("gpt-5.6");
+    expect(requestProposal).toHaveBeenCalledTimes(6);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1_000, undefined);
+    expect(sleep).toHaveBeenNthCalledWith(5, 16_000, undefined);
+  });
+
+  it("fails fast for missing credentials and non-retryable errors", async () => {
+    const input = synthesisInput();
+    delete process.env.OPENAI_API_KEY;
+    await expect(synthesizeFounderActions(input)).rejects.toMatchObject({
+      code: "synthesis_misconfigured",
+    });
+
+    const requestProposal = vi.fn(async () => {
+      throw Object.assign(new Error("invalid key"), { status: 401 });
+    });
+    await expect(synthesizeFounderActions(input, { requestProposal })).rejects.toMatchObject({
+      code: "synthesis_unavailable",
+    });
+    expect(requestProposal).toHaveBeenCalledOnce();
+  });
+
+  it("honors Retry-After without re-running deterministic analysis", async () => {
+    const input = synthesisInput();
+    const sleep = vi.fn(async () => undefined);
+    const requestProposal = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("rate limited"), {
+          status: 429,
+          headers: { "retry-after": "3" },
+        }),
+      )
+      .mockResolvedValueOnce({
+        parsed: { actions: [{ remediationCode: "remove-exposed-secret" }] },
+        model: "gpt-5.6",
+        inputTokens: 100,
+        outputTokens: 10,
+      });
+
+    await expect(synthesizeFounderActions(input, {
+      requestProposal,
+      sleep,
+      now: () => 0,
+    })).resolves.toMatchObject({
+      actions: input.fallbackActions,
+      meta: { source: "gpt-5.6" },
+    });
+    expect(sleep).toHaveBeenCalledWith(3_000, undefined);
+    expect(requestProposal).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops retrying before the complete synthesis deadline is exceeded", async () => {
+    let currentTime = 0;
+    const requestProposal = vi.fn(async () => {
+      currentTime += 8_000;
+      throw Object.assign(new Error("temporarily unavailable"), {
+        status: 503,
+      });
+    });
+    const sleep = vi.fn(async (delayMs: number) => {
+      currentTime += delayMs;
+    });
+
+    await expect(
+      synthesizeFounderActions(synthesisInput(), {
+        requestProposal,
+        sleep,
+        now: () => currentTime,
+        random: () => 0.5,
+      }),
+    ).rejects.toMatchObject({
+      code: "synthesis_unavailable",
+      message: expect.stringContaining("deadline"),
+    });
+    expect(currentTime).toBeLessThanOrEqual(45_000);
+    expect(requestProposal).toHaveBeenCalledTimes(4);
+  });
+
+  it("stops during backoff without another attempt", async () => {
+    const controller = new AbortController();
+    const requestProposal = vi.fn(async () => {
+      throw Object.assign(new Error("temporarily unavailable"), { status: 503 });
+    });
+    const sleep = vi.fn(async (_milliseconds: number, signal?: AbortSignal) => {
+      controller.abort();
+      throw signal?.reason;
+    });
+
+    await expect(synthesizeFounderActions({
+      ...synthesisInput(),
+      signal: controller.signal,
+    }, { requestProposal, sleep })).rejects.toMatchObject({ name: "AbortError" });
+    expect(requestProposal).toHaveBeenCalledOnce();
   });
 
   it("propagates cancellation instead of converting it to fallback", async () => {
@@ -176,7 +283,7 @@ describe("OpenAI synthesis boundary", () => {
     };
     const requestProposal = vi.fn(
       async (_payload: unknown, signal?: AbortSignal) => {
-        expect(signal).toBe(controller.signal);
+        expect(signal).not.toBe(controller.signal);
         controller.abort();
         throw signal?.reason;
       },

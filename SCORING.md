@@ -10,6 +10,8 @@ versioned so it can be calibrated from feedback after the hackathon.
 1. Deterministic checks own scores and verdicts.
 2. GPT-5.6 may propose the order of allowlisted remediation codes. Displayed
    titles, rationale, severity, sources, and verification remain deterministic.
+   A scan completes only after a usable proposal; GPT failure returns no partial
+   report and never changes the deterministic assessment.
 3. Repository evidence is not proof of runtime or organizational behaviour.
 4. Documentation earns partial credit but cannot substitute for enforcement.
 5. Missing evidence is different from evidence that a control fails.
