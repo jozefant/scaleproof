@@ -16,9 +16,9 @@ The reviewer verification thread independently reviewed the architecture and
 verified the implementation produced in the primary thread, including the
 resulting fixes and completion checks.
 
-Before submission, run `/feedback` in the primary thread and copy the Session
-ID shown by Codex into Devpost. The value produced by `/feedback` is the
-authoritative submission value; compare it with the primary thread ID above.
+`/feedback` has been run in the primary thread. Copy the Session ID shown by
+Codex into Devpost. The value produced by `/feedback` is the authoritative
+submission value; compare it with the primary thread ID above.
 
 ## Project
 
@@ -27,7 +27,7 @@ authoritative submission value; compare it with the primary thread ID above.
   engineering team.
 - **Intended category:** Developer Tools
 - **Creator:** Jozef Antony
-- **Repository URL:** Pending
+- **Repository URL:** [github.com/jozefant/scaleproof](https://github.com/jozefant/scaleproof)
 - **Deployed app URL:** Optional; pending
 
 ## Submission checklist
@@ -36,11 +36,11 @@ authoritative submission value; compare it with the primary thread ID above.
 - [x] README with setup, verification, Codex, and GPT-5.6 usage
 - [x] Primary Codex thread ID recorded
 - [x] Standalone Git repository initialized with default branch `main`
-- [x] GitHub Actions verification gate prepared
+- [x] GitHub Actions verification gate prepared and passing on `main`
 - [x] Project licensed under MIT
-- [ ] Run `/feedback` in the primary thread and confirm the Session ID
-- [ ] Choose the repository visibility
-- [ ] Publish the repository; if private, share it with the two judging accounts
+- [x] Run `/feedback` in the primary thread and confirm the Session ID
+- [x] Repository visibility chosen: public
+- [x] Publish the repository (public; judge sharing is not required)
 - [ ] Record a public YouTube demo shorter than three minutes with audio
 - [ ] Show the product, Codex contribution, and GPT-5.6 use in the demo
 - [ ] Complete the Devpost description and submitter details

@@ -71,14 +71,43 @@ cannot use ambient OpenAI credentials.
 ## How it works
 
 ```mermaid
-flowchart LR
-    A[Public GitHub root URL] --> B[Bounded temporary acquisition]
-    B --> C[Deterministic scan and anonymous history aggregation]
-    C --> D[Scores, verdict, and action candidates]
-    D --> E[Optional allowlisted GPT-5.6 ordering]
-    D --> F[Founder report]
-    E --> F
-    B --> G[Guaranteed cleanup]
+flowchart TD
+    subgraph Browser["Founder browser"]
+        A["Public GitHub root URL<br/>+ 3 optional context answers"]
+        B["Next.js intake"]
+        K["Founder report<br/>verdict, growth readiness, 3 actions, evidence"]
+        L["Markdown download"]
+        A --> B
+        K --> L
+    end
+
+    subgraph Scaleproof["Scaleproof application"]
+        C["POST /api/analyze"]
+        D["Application orchestrator"]
+        E["Bounded temporary acquisition<br/>and anonymous history aggregation"]
+        F["Deterministic controls and scoring"]
+        G["Verdict, domain scores, growth labels,<br/>evidence-linked action candidates"]
+        N["Clear raw source content<br/>before optional AI"]
+        H{"GPT-5.6 enabled?"}
+        I["Order allowlisted remediation codes<br/>categorical data only, store: false"]
+        J["Validate and assemble<br/>versioned public report"]
+        M["Delete temporary acquisition files"]
+
+        C --> D --> E --> F --> G --> N --> H
+        H -- No --> J
+        H -- Yes --> I --> J
+        E -. finally .-> M
+    end
+
+    subgraph External["External services"]
+        GH["Public GitHub"]
+        OAI["OpenAI Responses API"]
+    end
+
+    B --> C
+    E <--> GH
+    I <--> OAI
+    J --> K
 ```
 
 Source text, snippets, repository names, paths, secrets, personal data,

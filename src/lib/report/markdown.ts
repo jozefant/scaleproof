@@ -10,7 +10,7 @@ function singleLine(value: string): string {
 }
 
 export function escapeMarkdownProse(value: string): string {
-  return singleLine(value).replace(/([\\`*_[\]<>])/g, "\\$1");
+  return singleLine(value).replace(/([\\`*_[\]<>|])/g, "\\$1");
 }
 
 export function escapeMarkdownLinkLabel(value: string): string {
@@ -32,7 +32,7 @@ export function markdownCodeSpan(value: string): string {
 }
 
 function markdownTableCell(value: string): string {
-  return escapeMarkdownProse(value).replace(/\|/g, "\\|");
+  return escapeMarkdownProse(value);
 }
 
 export function renderMarkdownReport(report: AnalysisReport): string {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { analyzeRepository } from "@/lib/application/analyze-repository";
 import { acquireDemoRepository } from "@/lib/repository/demo";
 import { AnalysisReportSchema, REPORT_SCHEMA_VERSION } from "./contract";
-import { renderMarkdownReport } from "./markdown";
+import { escapeMarkdownProse, renderMarkdownReport } from "./markdown";
 
 async function demoReport() {
   const previousKey = process.env.OPENAI_API_KEY;
@@ -138,5 +138,10 @@ describe("public report contract", () => {
     expect(markdown).not.toContain("\n- forged");
     expect(markdown).toContain("\\[repo\\] # injected");
     expect(markdown).toContain("``src/`odd` ## heading.ts``");
+  });
+  it("escapes every table-cell metacharacter in one global pass", () => {
+    expect(escapeMarkdownProse("domain\\|column")).toBe(
+      ["domain", "\\\\", "\\|", "column"].join(""),
+    );
   });
 });
