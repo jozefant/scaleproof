@@ -52,6 +52,25 @@ and Playwright. TypeScript 6 remains available for API-dependent tooling until
 the Next.js and ESLint toolchain can use the TypeScript 7 API. Run focused tests
 while iterating, then run the complete gate before handing off code.
 
+## Real-repository final tests
+
+Use synthetic fixtures for focused tests, normal per-change verification,
+`npm run verify`, and CI. Do not scan real repositories after routine commits
+or builds.
+
+Run the following public-repository corpus only when the user explicitly asks
+for a full retest or a test on real repositories:
+
+Repositories:
+https://github.com/mawazawa/deeptype
+https://github.com/thorwebdev/lovable-supa-elevenlabs-voice-note
+https://github.com/ShenSeanChen/yt-Lovable-Supabase-GoogleAuth-Github
+https://github.com/NebeyouMusie/Healthcare-Landing-Page
+
+Treat these as live network tests, not stable fixtures or CI dependencies. Do
+not copy their contents into this repository. For each requested run, record
+the test date, analyzed commit SHA when available, scan outcome, and anomalies.
+
 ## Non-negotiable rules
 
 - Accept only public GitHub repository root URLs. Do not add private-repository

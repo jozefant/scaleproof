@@ -127,6 +127,8 @@ export function renderMarkdownReport(report: AnalysisReport): string {
     "",
     "## Evidence dossier",
     "",
+    "This includes the versioned SaaS 10x audit controls. Findings contain evidence locations and summaries, never source snippets.",
+    "",
     ...report.checks.flatMap((check) => [
       `### ${escapeMarkdownProse(check.title)}`,
       "",

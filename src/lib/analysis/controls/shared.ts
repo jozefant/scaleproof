@@ -30,6 +30,8 @@ export type ControlEvaluator = (
 export interface DetectorMetadata {
   id: string;
   claim: string;
+  domain: CheckResult["domain"];
+  severity: Severity;
   applicability: string;
   requiredSignals: readonly string[];
   disqualifyingSignals: readonly string[];
@@ -38,10 +40,45 @@ export interface DetectorMetadata {
   remediationCode: string;
 }
 
+type MetadataWithoutProfile = Omit<DetectorMetadata, "domain" | "severity">;
+
+const DEFAULT_METADATA_PROFILES: Record<
+  string,
+  Pick<DetectorMetadata, "domain" | "severity">
+> = {
+  "saas.stateless-tier": { domain: "reliability", severity: "high" },
+  "saas.database-discipline": { domain: "reliability", severity: "high" },
+  "saas.slow-work": { domain: "reliability", severity: "high" },
+  "saas.failure-safety": { domain: "reliability", severity: "critical" },
+  "saas.config-boundary": { domain: "security", severity: "medium" },
+  "saas.tenant-isolation": { domain: "security", severity: "critical" },
+  "saas.observability": { domain: "operations", severity: "high" },
+  "saas.feature-flags": { domain: "quality", severity: "medium" },
+  "saas.ci-test-gate": { domain: "quality", severity: "high" },
+  "saas.critical-bus-factor": { domain: "architecture", severity: "high" },
+  "saas.written-decisions": { domain: "architecture", severity: "medium" },
+  "saas.dependency-freshness": { domain: "quality", severity: "info" },
+  "saas.critical-test-distribution": { domain: "quality", severity: "high" },
+};
+
+function defaultProfile(id: string): Pick<DetectorMetadata, "domain" | "severity"> {
+  if (id.startsWith("arch.")) return { domain: "architecture", severity: "medium" };
+  if (id.startsWith("quality.")) return { domain: "quality", severity: "medium" };
+  if (id.startsWith("security.")) return { domain: "security", severity: "high" };
+  if (id.startsWith("ops.")) return { domain: "operations", severity: "high" };
+  if (id.startsWith("rel.")) return { domain: "reliability", severity: "high" };
+  if (id.startsWith("res.")) return { domain: "resilience", severity: "high" };
+  if (id.startsWith("agent.")) return { domain: "agent_readiness", severity: "high" };
+  throw new Error(`No metadata profile is defined for ${id}.`);
+}
+
 export function defineDetectorMetadata<
-  const T extends readonly DetectorMetadata[],
->(metadata: T): T {
-  return metadata;
+  const T extends readonly MetadataWithoutProfile[],
+>(metadata: T): readonly DetectorMetadata[] {
+  return metadata.map((entry) => ({
+    ...entry,
+    ...(DEFAULT_METADATA_PROFILES[entry.id] ?? defaultProfile(entry.id)),
+  }));
 }
 
 export function result(input: ResultInput): CheckResult {

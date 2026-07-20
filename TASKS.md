@@ -1,6 +1,6 @@
 # Scaleproof implementation tasks
 
-Updated: 2026-07-19
+Updated: 2026-07-20
 
 This file is the current implementation backlog. Product boundaries belong in
 `README.md` and `AGENTS.md`; architecture, scoring, and security decisions
@@ -134,14 +134,15 @@ and answer each question with one click or tap.
 
 Design direction:
 
-- Keep the editorial-utilitarian visual system: Newsreader and Manrope,
-  cream/ink surfaces, signal orange, hard borders, and the existing `A/B/C`
-  question numbering.
-- Use a compact choice grid with visible radio indicators and an unmistakable
-  orange selected state. Do not introduce generic SaaS pills, a component
-  library, or decorative animation.
-- Preserve the asymmetric intake composition and keep the repository scan as
-  the dominant action.
+- Apply the guided-utility theme defined by P1.9; P1.9 supersedes the previous
+  hard-border editorial treatment but not this task's interaction and
+  accessibility requirements.
+- Use compact choice cards with visible radio indicators and an unmistakable
+  orange selected state. Do not introduce a component library or decorative
+  animation.
+- Keep the repository scan as the dominant action and preserve the existing
+  `A/B/C` question order unless P1.9 provides an equally clear accessible
+  hierarchy.
 
 Implementation:
 
@@ -184,6 +185,120 @@ Acceptance:
 - Saved desktop and 390 x 844 Playwright screenshots show clear selected,
   unselected, focus, and disabled states without weakening the existing visual
   identity.
+
+Validation:
+
+```bash
+npm run test:e2e
+npm run verify
+```
+
+### [ ] P1.9 Adopt a calm guided-utility UI theme
+
+Refresh the landing, intake, progress, and report presentation using the visual
+and interaction principles demonstrated by the
+[Lovable Cloud to Supabase Exporter](https://dreamlit.ai/tools/lovable-cloud-to-supabase-exporter).
+Use it as a design reference, not as a source of copied brand assets, product
+copy, or components. Preserve Scaleproof's product boundary, report contract,
+deterministic scoring, privacy constraints, and three-action founder brief.
+
+Main differences to resolve:
+
+| Area | Current Scaleproof UI | Target adaptation |
+| --- | --- | --- |
+| Visual stance | Editorial technical dossier with cream paper, serif display type, hard black rules, and an oversized verdict stamp | Calm guided technical utility with a light canvas, restrained typography, soft borders, rounded cards, and signal-orange emphasis |
+| Entry flow | Large split hero and intake panel compete for the first viewport | Compact value statement, one dominant repository action, a short prerequisites card, and a visible path to the result |
+| Interaction model | Form followed by a dense long-form dossier | Progressive `Repository -> Evidence -> Three actions` state model with task-oriented cards and contextual help |
+| Hierarchy | Dramatic headings and several visually equal report sections | Moderate headings, generous whitespace, summary first, three actions second, expandable evidence last |
+| Trust | Methodology and privacy prose carry most of the trust load | Keep those claims, then reinforce them with concise prerequisites, explicit automated-snapshot language, safe processing states, and evidence locations |
+| Mobile | Large type and dense grids create wrapping pressure | One-column cards, compact controls, predictable spacing, and readable repository labels |
+
+Design direction:
+
+- Aesthetic: **calm guided technical utility**.
+- Purpose: let a busy founder understand the input, start a scan, recognize the
+  current phase, and reach the verdict plus three actions without learning the
+  scoring system first.
+- Differentiation anchor: a persistent but compact
+  `Repository -> Evidence -> Three actions` rail. With the logo removed, this
+  rail and the evidence-linked action cards should still identify Scaleproof.
+- DFII: aesthetic impact 3, context fit 5, implementation feasibility 4,
+  performance safety 5, consistency risk 2; total **15**.
+
+Design system:
+
+- Reuse the bundled Newsreader and Manrope fonts. Use Manrope for operational
+  UI and body copy; reserve Newsreader for the hero promise and verdict so the
+  interface becomes calmer without losing Scaleproof's identity.
+- Replace the paper texture and full-page center rule with a light neutral
+  canvas, white/off-white cards, soft gray dividers, signal orange for the
+  primary action and current state, and the existing green/red semantics only
+  for verified positive and concrete negative results.
+- Define the theme through CSS variables. Use one spacing rhythm, consistent
+  10-16 pixel card radii, subtle one-level shadows, and no decorative gradients
+  or animation.
+- Motion is limited to real phase changes, disclosure expansion, and focus or
+  hover feedback. Respect `prefers-reduced-motion`.
+
+Implementation:
+
+1. Refactor the global theme tokens and the landing/report CSS modules without
+   adding a component library, new font, animation package, or global state
+   manager.
+2. Replace the split campaign hero with a centered, bounded introduction and a
+   prominent scan card. Keep the public GitHub root URL as the first interactive
+   element and keep the synthetic demo visibly secondary.
+3. Add a compact prerequisites/trust card using only established facts: one
+   public repository, no account, scanned code is not executed, and the result
+   is an automated snapshot rather than an audit. Do not copy the reference's
+   testimonials, usage counts, sign-in, pricing, booking links, or sales CTAs.
+4. Implement P1.5 radio choices inside the new card system. Optional context
+   must remain visibly optional and must not delay the repository scan.
+5. Render the `Repository -> Evidence -> Three actions` rail on intake,
+   processing, and report states. Every displayed phase must correspond to a
+   real application state; do not invent percentages, durations, or completed
+   phases.
+6. Recompose the report so the first viewport contains the repository label,
+   automated-snapshot qualifier, verdict, score/confidence/coverage summary,
+   and a clear route to the three actions. Keep the three actions prominent and
+   move domain detail and the evidence dossier into calm, accessible disclosure
+   cards below them.
+7. Keep `Download .md` and `New scan` available without using a large sticky
+   header that covers focused evidence. Preserve keyboard focus when opening a
+   supporting check and add the required scroll margin for sticky UI.
+8. Complete V.1 in the same change: prefer a line break after the repository
+   owner separator and retain emergency wrapping only for an overlong segment.
+9. Preserve safe evidence locations, all 13 SaaS checks, the three-action cap,
+   cancellation, error recovery, and every existing API/report contract.
+10. Update the Playwright journey to save desktop and 390 x 844 screenshots for
+    the landing, selected context, processing state, report summary, actions,
+    and evidence dossier.
+
+Acceptance:
+
+- The repository URL and primary Analyze action are visible in the first
+  desktop viewport and remain easy to reach at 390 x 844.
+- The visual hierarchy is value -> repository -> optional context -> progress
+  -> verdict -> three actions -> evidence; methodology never competes with the
+  first action.
+- The new theme uses a light neutral canvas, soft cards, restrained typography,
+  orange primary emphasis, and consistent spacing without copying Dreamlit or
+  Lovable branding.
+- The progress rail reports only real states and remains understandable without
+  color.
+- The report still exposes the same deterministic verdict, scores, coverage,
+  three actions, checks, privacy boundary, Markdown download, and new-scan
+  behavior.
+- The demo repository label renders as `scaleproof/` plus `demo-startup`; no
+  tested label or control creates horizontal overflow.
+- Keyboard navigation, focus visibility, semantic headings, disclosure
+  controls, form labels, contrast, reduced motion, and 44-pixel touch targets
+  remain valid.
+- No account, analytics, testimonial, contact capture, booking link, sales CTA,
+  copied asset, new font, or new runtime UI dependency is introduced.
+- Saved desktop and mobile screenshots show no covered content, clipped labels,
+  accidental horizontal scrolling, or inconsistent old-theme sections.
+- `npm run verify` passes.
 
 Validation:
 
@@ -306,10 +421,17 @@ Acceptance:
 
 ## Verification baseline
 
-Verified on 2026-07-20:
+Verified on 2026-07-20 after the seventh implementation review:
 
-- `npm run verify`: ESLint, TypeScript 6 and 7, 12 Vitest files / 92 tests,
-  production build, and 7 Playwright tests passed.
+- Lint and TypeScript 6 and 7 passed.
+- `npm test`: 13 Vitest files / 113 tests passed.
+- `npm run build`: webpack production build passed.
+- `npm run test:e2e`: all 7 Playwright journeys passed from a fresh local
+  server lifecycle.
+- The focused implementation suite passed 45 tests and the independent
+  SaaS-audit suite passed all 19 cases, including the evidence-cap,
+  configured-instance, no-argument instance, and same-file mixed-instance
+  regressions.
 - TypeScript 6.0.3 emitted no deprecation warnings. TypeScript 7.0.2 passed in
   default and single-threaded modes; the `ts5to6` migration tool found no
   `baseUrl` or inferred-`rootDir` migration defect.

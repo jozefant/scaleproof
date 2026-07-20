@@ -88,6 +88,8 @@ describe("context-sensitive controls", () => {
         (entry) =>
           entry.requiredSignals.length > 0 &&
           entry.disqualifyingSignals.length > 0 &&
+          entry.domain.length > 0 &&
+          entry.severity.length > 0 &&
           entry.confidenceLimitation.length > 20,
       ),
     ).toBe(true);

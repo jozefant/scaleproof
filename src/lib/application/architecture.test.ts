@@ -44,7 +44,14 @@ describe("architecture dependency direction", () => {
       "utf8",
     );
     expect(route).not.toMatch(/analysis\/(controls|scoring|actions)/);
-    expect(route).toContain("analyzeRepository");
+    expect(route).toContain("handleAnalyzeRequest");
+
+    const handler = await readFile(
+      path.join(process.cwd(), "src/lib/application/analyze-route.ts"),
+      "utf8",
+    );
+    expect(handler).not.toMatch(/analysis\/(controls|scoring|actions)/);
+    expect(handler).toContain("analyzeRepository");
   });
 
   it("keeps domain control packs independent", async () => {

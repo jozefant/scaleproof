@@ -1,6 +1,6 @@
 import type { DomainId, EvidenceTier, Severity } from "./types";
 
-export const HEURISTIC_VERSION = "0.5.0-hackathon";
+export const HEURISTIC_VERSION = "0.6.0-hackathon";
 
 export const DOMAIN_CONFIG: Record<
   DomainId,

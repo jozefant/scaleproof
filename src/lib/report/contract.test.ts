@@ -83,6 +83,16 @@ describe("public report contract", () => {
     expect(markdown).toContain("3 relevant files unprocessed");
   });
 
+  it("renders SaaS-audit checks as safe evidence locations in the Markdown dossier", async () => {
+    const report = await demoReport();
+    const markdown = renderMarkdownReport(report);
+
+    expect(report.checks.filter((check) => check.id.startsWith("saas."))).toHaveLength(13);
+    expect(markdown).toContain("This includes the versioned SaaS 10x audit controls.");
+    expect(markdown).toContain("`saas.stateless-tier`");
+    expect(markdown).toContain("never source snippets.");
+  });
+
   it.each([
     "javascript:alert(1)",
     "https://example.com/owner/repository",

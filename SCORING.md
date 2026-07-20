@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.5.0-hackathon`
+Version: `0.6.0-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -75,6 +75,78 @@ rule.
 benchmark, configured command, or enforced performance budget. A
 `performance/README.md` can earn documented evidence when it contains a plan;
 its path alone never establishes a repeatable performance test.
+
+## SaaS 10x audit lens
+
+The following is the canonical, versioned SaaS 10x rule catalog. It is adapted
+to Scaleproof's repository-only boundary, mapped into the existing seven score
+domains, and appears in the evidence dossier; it does not create a competing
+score or a fourth intake question.
+
+| Rule | Control | Domain / highest severity | Static audit scope |
+| --- | --- | --- | --- |
+| Stateless tier | `saas.stateless-tier` | Reliability / High | Session, user, tenant, or job state in memory; request-path stateful local writes only. |
+| Database discipline | `saas.database-discipline` | Reliability / High | Unbounded queries, explicit N+1 loop patterns, bounded requests, migrations, query-predicate/index overlap, and read/write-replica readiness where configured. |
+| Slow request work | `saas.slow-work` | Reliability / High | HTTP, mail, and similar work in request handlers; queue, worker, scheduler, or asynchronous boundary evidence. |
+| Failure safety | `saas.failure-safety` | Reliability / Critical | Timeout and retry/backoff/idempotency evidence at the same call site or from an explicit library-wide default; payment and webhook handlers require local idempotency evidence. |
+| Configuration boundary | `saas.config-boundary` | Security / Medium | Non-local endpoints or credential-shaped values in production source; environment-owned configuration and pool settings in source or deployment configuration. |
+| Tenant isolation | `saas.tenant-isolation` | Security / Critical | Tenant-owned data, central RLS/filter/repository boundaries, and direct tenant queries without a visible predicate or central boundary. |
+| Observability | `saas.observability` | Operations / High | Metrics/tracing plus correlation propagation or independently detected structured logging. |
+| Release control | `saas.feature-flags` | Quality / Medium | Feature flags and configuration-gated kill switches for live or scaling applications. |
+| CI test gate | `saas.ci-test-gate` | Quality / High | Visible test files linked to a merge-candidate CI workflow that runs a recognized test command. Hosting branch protection remains runtime-only. |
+| Critical-area ownership | `saas.critical-bus-factor` | Architecture / High | Anonymous concentration above 70% only for a history module that is also a recognized auth, payment, webhook, or tenant area. |
+| Written decisions | `saas.written-decisions` | Architecture / Medium | ADRs or independent decision records. |
+| Dependency freshness | `saas.dependency-freshness` | Quality / Info | Dependency manifests are reported, but EOL and freshness stay runtime-only without a maintained dated compatibility catalog. |
+| Critical-path tests | `saas.critical-test-distribution` | Quality / High | Each detected auth, payment, webhook, or tenant area must have a matching test-path area; this is distribution, not coverage. |
+
+The rule catalog deliberately has no invented failure state. For example,
+dependency EOL is always runtime-only without a dated catalog; tenant isolation
+is not applicable when tenant-owned data is absent; and statelessness,
+observability, or written decisions remain missing evidence when no direct
+contrary pattern is found. Tests assert these neutral states rather than turning
+absence into a production claim.
+
+Rule-to-subsection mapping: database discipline covers 2a unbounded queries,
+2b explicit N+1 loops, 2c query/index overlap, and 2d replica/read-write
+readiness; failure safety covers payment and webhook idempotency, retry/backoff,
+and timeout association; tenant isolation covers central enforcement and visible
+tenant-query coverage; CI covers tests, merge-candidate workflow linkage, and
+the runtime-only branch-protection limitation; and critical-area ownership and
+test distribution both operate per recognized critical area, never from a
+repository-wide aggregate or generic test count. Statelessness, slow work,
+configuration, observability, flags, written decisions, and dependency health
+each map one-to-one to the remaining catalog rules.
+
+- The scanner is static and read-only. It never installs dependencies, runs
+  scanned code, invokes a package audit, or sends repository content to an
+  external service.
+- A concrete failure requires direct, bounded repository evidence, such as a
+  recognized client call with no visible timeout or process-local session
+  state. Missing patterns remain missing evidence, not a claimed production
+  defect.
+- Tenant isolation is not applicable when no tenant-owned data signal is
+  present. An uncertain product stage keeps feature-flag applicability neutral.
+- Dependency EOL and lockfile age require a maintained, dated compatibility
+  source. Until one is deliberately added, dependency freshness is runtime-only
+  and makes no EOL claim.
+- The SaaS-audit source patterns are reviewed for TypeScript/JavaScript, Java,
+  Python, Ruby, and Go. Other languages retained by the general repository
+  scanner remain visible to broader controls but do not create SaaS-audit
+  failures until language-specific patterns and regressions are added.
+- The audit exposes paths and deterministic summaries only. It never includes
+  source snippets, contributor identities, commit text, or runtime metrics.
+
+### Weight treatment and calibration
+
+The 13 controls are intentionally separate from the broader existing controls:
+they preserve a founder-readable finding for each SaaS rule and add only their
+declared weight to the same domain. This creates deliberate overlap with broad
+controls such as `rel.stateless`, `rel.database-foundations`,
+`rel.failure-controls`, `ops.observability`, `quality.ci`, and architectural
+decision and bus-factor controls. The overlap is not yet externally calibrated;
+before changing weights or verdict thresholds, record independent technical and
+founder review against the fixed synthetic cases in `TASKS.md` P2.2. Until then,
+the heuristic version and its test expectations remain the reviewable baseline.
 
 ## Control score
 

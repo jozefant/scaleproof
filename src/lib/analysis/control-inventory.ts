@@ -5,12 +5,15 @@ import { qualityDetectorMetadata } from "./controls/quality";
 import { reliabilityDetectorMetadata } from "./controls/reliability";
 import { resilienceDetectorMetadata } from "./controls/resilience";
 import { securityDetectorMetadata } from "./controls/security";
+import { saasAuditDetectorMetadata } from "./controls/saas-audit";
 import type { DetectorMetadata } from "./controls/shared";
 import type { CheckResult } from "./types";
 
 export interface ControlInventoryEntry {
   id: string;
   claim: string;
+  domain: DetectorMetadata["domain"];
+  severity: DetectorMetadata["severity"];
   applicability: string;
   requiredSignals: readonly string[];
   disqualifyingSignals: readonly string[];
@@ -27,6 +30,7 @@ const DETECTOR_METADATA: readonly DetectorMetadata[] = [
   ...reliabilityDetectorMetadata,
   ...resilienceDetectorMetadata,
   ...agentReadinessDetectorMetadata,
+  ...saasAuditDetectorMetadata,
 ];
 
 export function buildControlInventory(
@@ -64,6 +68,8 @@ export function buildControlInventory(
   return DETECTOR_METADATA.map((metadata) => ({
     id: metadata.id,
     claim: metadata.claim,
+    domain: metadata.domain,
+    severity: metadata.severity,
     applicability: metadata.applicability,
     requiredSignals: metadata.requiredSignals,
     disqualifyingSignals: metadata.disqualifyingSignals,

@@ -34,6 +34,12 @@ Repository evidence is not proof of runtime behaviour, organizational
 practice, measured capacity, compliance, or investment quality. Missing
 evidence is kept separate from a concrete failure.
 
+The evidence dossier also includes a versioned SaaS 10x audit lens: stateless
+handling, database discipline, slow work, failure safety, configuration,
+tenant isolation, observability, feature flags, CI, ownership, decisions,
+dependency freshness limits, and critical-path tests. It is static and
+read-only: it never runs the scanned repository or claims runtime capacity.
+
 ## Run locally
 
 Prerequisites: Node.js 22.11 or newer, npm, and network access to public GitHub.

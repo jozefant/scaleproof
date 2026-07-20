@@ -8,7 +8,7 @@ import {
 import {
   handleAnalyzeRequest,
   type AnalyzeRouteDependencies,
-} from "./route";
+} from "@/lib/application/analyze-route";
 
 const context = {
   stage: "unknown" as const,

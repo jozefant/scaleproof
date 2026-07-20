@@ -30,6 +30,70 @@ submission value; compare it with the primary thread ID above.
 - **Repository URL:** [github.com/jozefant/scaleproof](https://github.com/jozefant/scaleproof)
 - **Deployed app URL:** Optional; pending
 
+## Devpost project story
+
+Paste the following into Devpost's **About the project** field.
+
+```markdown
+## Inspiration
+
+Founders need quick technical insight into whether a codebase is ready for
+growth. Scaleproof evaluates a public GitHub repository as Fundable, Fixable, or
+Rewrite and provides up to three actionable next steps.
+
+## What it does
+
+Scaleproof evaluates architecture, quality, security, observability,
+reliability, data resilience, and AI readiness. It checks anonymous contributor
+concentration, provides scaling signals, and generates a downloadable report.
+It is an automated snapshot rather than an audit, and it keeps missing evidence
+separate from verified failures.
+
+## How I built it
+
+Scaleproof uses Next.js and TypeScript with separate repository acquisition,
+deterministic analysis, AI synthesis, and report layers. It scans public
+repository URLs, applies bounded static checks, aggregates anonymous contributor
+data, and creates a schema-validated report. AI may prioritize allowlisted
+remediation steps but cannot change deterministic outcomes.
+
+I used Codex in multiple sessions for research, architecture, implementation,
+tests, browser QA, documentation, and independent review. The reviewer found
+additional defects that were fixed and reverified before release.
+
+## Challenges I faced
+
+Establishing trust was the central challenge. I kept missing evidence separate
+from verified issues, bounded all scanning, and prevented repository content
+from entering the AI payload.
+
+## What I learned
+
+AI is most useful here for prioritizing constrained, evidence-backed actions,
+not replacing technical evaluation. Privacy and transparent evidence states
+must be architectural decisions rather than report-writing details.
+```
+
+## Built with
+
+Use these Devpost tags:
+
+`TypeScript`, `Next.js`, `React`, `Node.js`, `OpenAI API`, `GPT-5.6`, `Codex`,
+`GitHub API`, `GitHub Actions`, `Tailwind CSS`, `Zod`, `Vitest`, `Playwright`,
+`ESLint`, `Recharts`, `npm`.
+
+## Devpost links and media
+
+- **Try it out / source:** [github.com/jozefant/scaleproof](https://github.com/jozefant/scaleproof)
+- **Demo site:** Pending. Do not enter an invented URL.
+- **Video:** Pending public YouTube upload; it must be shorter than three
+  minutes and include spoken explanation of both Codex and GPT-5.6 use.
+- **Gallery:** Capture 3:2 screenshots from the synthetic demo only: the
+  landing/intake page, a completed verdict with the three actions,
+  growth-readiness and bus-factor sections, the evidence dossier, and the
+  Markdown-download action. Do not use a real scanned repository in public
+  screenshots.
+
 ## Submission checklist
 
 - [x] Working local application

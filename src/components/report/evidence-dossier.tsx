@@ -47,8 +47,8 @@ export function EvidenceDossier({ report }: { report: AnalysisReport }) {
           <h2>The details, separated from the decision.</h2>
         </div>
         <p>
-          Findings show locations, never source snippets. Runtime-only facts
-          remain explicitly unverified.
+          Findings, including the SaaS 10x audit rules, show locations never
+          source snippets. Runtime-only facts remain explicitly unverified.
         </p>
       </div>
       <div className="domain-accordions">

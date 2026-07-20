@@ -7,6 +7,7 @@ import { qualityControls } from "./controls/quality";
 import { reliabilityControls } from "./controls/reliability";
 import { resilienceControls } from "./controls/resilience";
 import { securityControls } from "./controls/security";
+import { saasAuditControls } from "./controls/saas-audit";
 
 export function evaluateControls(
   snapshot: Parameters<typeof createRepositoryIndex>[0],
@@ -21,6 +22,7 @@ export function evaluateControls(
     ...reliabilityControls(),
     ...resilienceControls(),
     ...agentReadinessControls(),
+    ...saasAuditControls(),
   ];
 
   return evaluators.map((evaluate) => evaluate(index, context));

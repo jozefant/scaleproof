@@ -31,6 +31,9 @@ data; Scaleproof minimizes handling but cannot make that publication safe.
 - API responses use `Cache-Control: no-store`.
 - Global responses set anti-framing, MIME-sniffing, referrer, opener, and browser-permission headers.
 - Credentials are read from process environment variables and never logged.
+- The SaaS 10x audit lens uses bounded static inspection only. Its evidence
+  dossier returns paths and summaries, never source snippets, and it does not
+  execute scanned code, install dependencies, or call external scanners.
 
 ## Data and log retention
 

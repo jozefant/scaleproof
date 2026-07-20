@@ -26,7 +26,7 @@ does not retain scan history.
 | Module | Responsibility | May depend on |
 | --- | --- | --- |
 | `src/lib/repository` | Strict GitHub URL parsing, temporary acquisition, text scanning, stack detection, anonymous history aggregation | Repository types and repository-owned limits |
-| `src/lib/analysis` | Signals, controls, scoring, verdicts, 10x/100x/team/agent assessments | No UI or OpenAI client |
+| `src/lib/analysis` | Signals, controls, scoring, SaaS 10x audit lens, verdicts, 10x/100x/team/agent assessments | No UI or OpenAI client |
 | `src/lib/ai` | Allowlisted payload, token budget, structured action proposal, deterministic reconciliation | Analysis draft and public action types |
 | `src/lib/application` | Deterministic orchestration, raw-content release, optional synthesis, and report assembly | Repository, analysis, AI, and report contract |
 | `src/lib/report` | Versioned Zod contract, shared labels, and pure Markdown rendering | Public analysis and repository result types |
@@ -46,8 +46,9 @@ changing the scoring model.
    generated output, binaries, oversized individual files, and lockfile bodies.
 6. Sample rate-budgeted repository and major-module commit history, hash contributor
    identities, aggregate concentration, and discard raw history.
-7. Evaluate deterministic controls and calculate domain scores, confidence,
-   verdict, growth, agent-readiness, and bus-factor assessments.
+7. Evaluate deterministic controls, including the bounded static SaaS 10x
+   audit lens, and calculate domain scores, confidence, verdict, growth,
+   agent-readiness, and bus-factor assessments.
 8. Clear repository file content from the orchestration object graph.
 9. Build an allowlisted categorical model payload within the target token budget.
 10. Reconcile any GPT-5.6 remediation-code ordering proposal with mandatory
