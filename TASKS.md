@@ -142,6 +142,48 @@ Acceptance:
 - Focused synthetic tests and `npm run verify` pass without using real
   repositories in CI.
 
+### [ ] P0.11 Add privacy-safe diagnostics for external-service calls
+
+The production route currently converts OpenAI failures and locally rejected
+model responses into the same founder-safe 503 without recording which class
+of failure occurred. Keep the public response generic, but make OpenAI, GitHub
+API, and GitHub archive failures diagnosable from Vercel logs without exposing
+repository or credential data.
+
+Implementation:
+
+1. Add one small structured logging boundary for external-service events. Log
+   only an independently generated request correlation ID, provider, operation,
+   attempt, duration, outcome, HTTP status class, an allowlisted provider error
+   code, and the retry decision.
+2. Before constructing the OpenAI client, require a non-empty, trimmed
+   `OPENAI_API_KEY`. If it is absent or blank, emit an error event with category
+   `configuration_missing` and return the existing safe founder-facing error.
+   Never log the value, length, prefix, suffix, hash, or serialized environment.
+3. Distinguish provider authentication, rate limiting, provider 5xx, timeout,
+   cancellation, transport failure, malformed structured output, and locally
+   rejected action priorities. Do not classify local response validation as a
+   transient provider outage.
+4. Apply the same safe event contract to GitHub metadata, archive download, and
+   any future external-service adapter. Preserve bounded retries and log one
+   terminal event rather than an exception dump containing request objects.
+5. Add synthetic tests for missing and whitespace-only configuration, 401, 429,
+   5xx, timeout, cancellation, malformed output, rejected priorities, and
+   success. Capture log output and assert the complete privacy denylist.
+
+Acceptance:
+
+- A missing or blank `OPENAI_API_KEY` produces a structured error containing
+  the variable name and `configuration_missing`, but no representation of its
+  value. The request still returns a safe response with `Cache-Control: no-store`.
+- Vercel logs distinguish provider failures from local output-validation
+  failures and show retry attempt, duration, and terminal outcome.
+- Logs never contain repository URLs or names, source text, file paths, commit
+  or contributor data, request/response bodies, model payloads, credentials,
+  authorization headers, cookies, or personal data.
+- OpenAI and GitHub failure-path tests plus `npm run verify` pass using only
+  synthetic fixtures and mocked providers.
+
 ### [ ] P1.0 Classify static frontend content separately from deploy-time runtime configuration
 
 A static React marketing site with only public image links was scored as having
@@ -347,8 +389,8 @@ public production service. This controlled demo does not replace or satisfy D.1.
 
 Implementation:
 
-1. Use Vercel Hobby with Fluid Compute, Node.js 22, a Frankfurt execution
-   region, and a generated `.vercel.app` preview URL.
+1. Use Vercel Hobby with Fluid Compute, Node.js 22, the accepted Washington,
+   D.C. (`iad1`) execution region, and a generated `.vercel.app` preview URL.
 2. Protect the preview with Vercel Authentication and provide testers with a
    revocable shareable link. Do not create a public production alias or custom
    domain.
@@ -380,6 +422,42 @@ Acceptance:
   appears in platform logs.
 - Any future unrestricted public launch remains blocked on D.1.
 - Deployment happens only after explicit user authorization.
+
+### [ ] D.3 Plan and de-risk the Node.js 24 upgrade
+
+Prepare a bounded migration plan before changing the production runtime. Keep
+Node.js 22 as the executable baseline until Node.js 24 compatibility and
+rollback are proven.
+
+Implementation:
+
+1. Inventory every Node.js version declaration and assumption in
+   `package.json`, the lockfile, CI, Vercel settings, agent instructions,
+   deployment guidance, and local commands. Identify native or optional
+   dependencies that may behave differently on Node.js 24.
+2. Verify current official support for Node.js 24 across Next.js, the OpenAI
+   SDK, TypeScript 6 and 7, Vitest, Playwright, ESLint, and Vercel Hobby. Record
+   only concrete incompatibilities, required upgrades, and removed behaviour.
+3. Run `npm ci`, `npm run verify`, and the complete Playwright suite under
+   Node.js 24. Review saved browser screenshots and exercise the synthetic demo
+   through real OpenAI synthesis in a protected Preview deployment.
+4. Define one atomic implementation change covering the `engines` constraint,
+   lockfile metadata, CI/runtime configuration, and concise documentation. Do
+   not mix scanner, scoring, or UI changes into the runtime upgrade.
+5. Document the rollback trigger and procedure to restore the last verified
+   Node.js 22 deployment if build, runtime, latency, or provider integration
+   checks regress.
+
+Acceptance:
+
+- The plan lists every file and Vercel setting that must change, with an owner,
+  command, expected evidence, and rollback step; no implicit Node default
+  remains.
+- Node.js 24 passes the full local gate and protected Preview smoke test,
+  including synthetic GPT synthesis, before Production changes.
+- Saved Playwright screenshots show no desktop or 390 x 844 regression.
+- The production upgrade is a separate explicitly authorized implementation
+  step. Node.js 22 remains supported until that step passes and is deployed.
 
 ## Verification baseline
 
