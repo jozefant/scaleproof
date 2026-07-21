@@ -1,153 +1,243 @@
-## Important constraint
+# Vercel Hobby preview deployment
 
-  Use Hobby only for a personal, non-commercial hackathon demo. Vercel requires Pro for commercial use. Vercel Fair Use
-  (https://vercel.com/docs/limits/fair-use-guidelines)
+Updated: 2026-07-21
 
-  Deploy this as a protected Preview Deployment. Hobby protection does not protect the production domain, so do not run vercel --prod, promote the deployment, or attach
-  a custom domain. Deployment Protection (https://vercel.com/docs/deployment-protection)
+This guide deploys Scaleproof as a protected hackathon Preview Deployment. It
+does not authorize or describe an unrestricted public production launch. See
+[`TASKS.md`](./TASKS.md) and the
+production gate in [`SECURITY.md`](./SECURITY.md#production-gate).
 
-## 1. Pin Node.js 22
+## Verified state
 
-  Change package.json:22 from:
+The first successful remote deployment established that:
 
-  "node": ">=22.11.0"
+- Next.js 16.2.10 compiled, type-checked, generated pages, and packaged the
+  `/api/analyze` Function successfully.
+- `vercel inspect` reported `target preview` and `status Ready`.
+- Explicit `--target=preview` is required for this project. The first bare
+  `npx vercel@latest` invocation unexpectedly created a Production target.
+- The `.next/lock` packaging failure is fixed by the route-specific exclusions
+  in [`next.config.ts`](./next.config.ts).
 
-  to:
+Two settings were not yet proven by that deployment:
 
+- `vercel project inspect scaleproof` still reported Node.js `24.x`; change the
+  project setting to `22.x`.
+- deployment inspection showed Function outputs in `iad1`; change the Function
+  region to Frankfurt (`fra1`) and redeploy before final acceptance.
+
+Do not mark D.2 complete until those settings, deployment protection, and the
+smoke test below pass.
+
+## Constraints
+
+- Use Hobby only for a personal, non-commercial hackathon demo. Commercial use
+  requires Pro. See [Vercel Fair Use](https://vercel.com/docs/limits/fair-use-guidelines).
+- Use a protected Preview Deployment. Hobby Standard Protection does not
+  protect the production domain. Do not use `--prod`, promote the deployment,
+  or attach a custom domain. See
+  [Deployment Protection](https://vercel.com/docs/deployment-protection).
+- Configure only `OPENAI_API_KEY`. Do not add `GITHUB_TOKEN`, analytics,
+  persistent storage, Upstash, or other integrations.
+
+## 1. Prepare the repository
+
+The repository must retain these settings:
+
+```json
+"engines": {
   "node": "^22.11.0"
+}
+```
 
-  The current range may cause Vercel to select Node 24. Supported Node.js versions (https://vercel.com/docs/functions/runtimes/node-js/node-js-versions)
+```gitignore
+.vercel/
+```
 
-  Also add this to .gitignore:18:
+The analysis route also excludes transient Next.js lock state from its output
+trace:
 
-  .vercel/
+```ts
+outputFileTracingExcludes: {
+  "/api/analyze": ["./.next/lock", "./.next/dev/**/*"],
+},
+```
 
-  Then run:
+Run the complete local gate before deployment:
 
-  npm install --package-lock-only
-  npm run verify
+```bash
+npm install --package-lock-only
+npm run verify
+```
 
-  git add package.json package-lock.json .gitignore
-  git commit -m "Prepare Vercel preview deployment"
-  git push origin main
+## 2. Link the Vercel project
 
-## 2. Create the Vercel project
+Create or sign in to a personal Hobby account, then run:
 
-  Create or sign into a personal Hobby account at vercel.com (https://vercel.com).
+```bash
+npx vercel@latest login
+npx vercel@latest link
+```
 
-  From the repository directory:
+Use:
 
-  npx vercel@latest login
-  npx vercel@latest link
+- personal Hobby scope;
+- project name `scaleproof`;
+- source directory `.`;
+- Next.js framework preset.
 
-  Choose:
+## 3. Configure the project
 
-  - Scope: your personal Hobby account
-  - Link existing project: No
-  - Project name: scaleproof
-  - Source directory: .
-  - Framework: Next.js, automatically detected
+Open `scaleproof -> Settings` in Vercel.
 
-## 3. Configure the runtime
+Under **Build and Deployment**:
 
-  In Vercel, open scaleproof → Settings.
+- Framework Preset: `Next.js`
+- Root Directory: `.`
+- Node.js Version: `22.x`
+- Build and output overrides: disabled
 
-  Under Build and Deployment:
+Under **Functions**:
 
-  - Framework Preset: Next.js
-  - Root Directory: .
-  - Node.js Version: 22.x
-  - Leave build and output overrides disabled
+- Function Region: `Frankfurt, Germany (fra1)`
+- Fluid Compute: enabled
 
-  Under Functions:
+Verify the visible project settings:
 
-  - Function Region: Frankfurt, Germany (fra1)
-  - Confirm Fluid Compute is enabled
+```bash
+npx vercel@latest project inspect scaleproof
+```
 
-  Hobby supports one function region. Vercel region configuration (https://vercel.com/docs/functions/configuring-functions/region)
+The result must report Node.js `22.x`. Hobby supports one Function region; see
+[Vercel region configuration](https://vercel.com/docs/functions/configuring-functions/region).
+The analysis route uses the Node.js runtime and a 120-second maximum duration,
+which is within current Fluid Compute limits. See
+[Vercel Function limits](https://vercel.com/docs/functions/limitations).
 
-  The existing src/app/api/analyze/route.ts:6 already uses Node.js and a 120-second maximum duration. Current Fluid Compute limits support that duration. Function limits
-  (https://vercel.com/docs/functions/limitations)
+## 4. Configure the secret and protection
 
-## 4. Add the OpenAI key
+Under **Settings -> Environment Variables**, add:
 
-  Open Settings → Environment Variables and add:
+```text
+Name: OPENAI_API_KEY
+Value: the real project key
+Environment: Preview
+```
 
-  Name: OPENAI_API_KEY
-  Value: your real key
-  Environment: Preview
+Never prefix it with `NEXT_PUBLIC_`. Environment changes apply only to later
+deployments. See
+[Vercel environment variables](https://vercel.com/docs/environment-variables).
 
-  Do not prefix it with NEXT_PUBLIC_.
+Under **Settings -> Deployment Protection**:
 
-  Do not add:
+1. Enable Vercel Authentication.
+2. Select Standard Protection.
+3. Save.
 
-  - GITHUB_TOKEN
-  - Analytics
-  - Databases or storage
-  - Upstash or other integrations
+## 5. Deploy explicitly to Preview
 
-  Environment changes apply only to subsequent deployments. Vercel environment variables (https://vercel.com/docs/environment-variables)
+Always make the target explicit:
 
-## 5. Enable deployment protection
+```bash
+npx vercel@latest deploy --target=preview --force
+```
 
-  Open Settings → Deployment Protection:
+Do not use bare `npx vercel@latest` for this project and never use `--prod`.
+Expected output includes:
 
-  1. Enable Vercel Authentication.
-  2. Select Standard Protection.
-  3. Save.
+```text
+Preview  https://scaleproof-...vercel.app
+```
 
-  This protects preview and generated deployment URLs. Production domains remain public on Hobby.
+## 6. Inspect the deployment
 
-## 6. Deploy the preview
+Use the URL returned by the deployment:
 
-  Run:
+```bash
+npx vercel@latest inspect <preview-url>
+```
 
-  npx vercel@latest
+Required result:
 
-  Do not add --prod.
+```text
+target  preview
+status  Ready
+```
 
-  Vercel will build the app and return a preview URL similar to:
+The deployment command's JSON may show `target: null`; the subsequent
+`vercel inspect` result is the acceptance check. Inspect the Function output
+region as well. If it still shows `[iad1]`, Frankfurt has not been applied;
+correct the Function setting and redeploy.
 
-  https://scaleproof-xxxxxxxx.vercel.app
+For a failed deployment, retrieve the full build log with:
 
-## 7. Create the tester link
+```bash
+npx vercel@latest inspect <deployment-url> --logs
+```
 
-  In Vercel:
+## 7. Create and test the shareable link
 
-  1. Open Deployments.
-  2. Select the new Preview Deployment.
-  3. Click Share.
-  4. Select Anyone with the link.
-  5. Copy the complete generated URL.
+In Vercel:
 
-  Hobby permits one shareable link per account. Shareable Links (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/sharable-links)
+1. Open **Deployments** and select the Ready Preview Deployment.
+2. Click **Share**.
+3. Select **Anyone with the link**.
+4. Copy the complete generated URL.
 
-## 8. Verify the deployment
+Hobby permits one shareable link per account. See
+[Shareable Links](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/sharable-links).
 
-  Use an incognito browser:
+Use an incognito browser to verify:
 
-  1. Open the preview URL without the share parameter—it should require Vercel authentication.
-  2. Open the complete shareable link—it should load the app.
-  3. Run the built-in synthetic demo.
-  4. Confirm the report completes within 120 seconds.
-  5. Test Markdown download, cancellation, and New scan.
-  6. Check Vercel Runtime Logs for errors.
-  7. Confirm logs contain no repository name, URL, source, paths, credentials, or contributor information.
+1. The plain preview URL requires Vercel authentication.
+2. The complete shareable link opens the app.
+3. The built-in synthetic demo produces a report within 120 seconds.
+4. Markdown download, cancellation, and **New scan** work.
+5. Runtime logs contain no repository URL, name, source, path, credential, or
+   contributor information.
 
-  Do not use a real repository unless you explicitly decide to run the full real-repository test.
+Do not use a real repository unless a full real-repository test is explicitly
+requested.
+
+## 8. Troubleshoot `.next/lock`
+
+The original remote build completed but failed during Vercel's
+`onBuildComplete` packaging step with:
+
+```text
+ENOENT: no such file or directory, lstat '/vercel/path0/.next/lock'
+```
+
+The route's output trace had captured Next.js's temporary build lock because
+the analysis Function performs dynamic filesystem scanning. The
+`outputFileTracingExcludes` configuration above is the fix. Do not create a
+dummy lock file or delete unrelated build output.
+
+After a local production build, confirm the trace no longer contains the lock:
+
+```bash
+node -e 'const path=require("node:path");const m=path.resolve(".next/server/app/api/analyze/route.js.nft.json");const f=require(m).files;const hit=f.some(x=>path.resolve(path.dirname(m),x)===path.resolve(".next/lock"));console.log(`route trace references .next/lock: ${hit}`);if(hit)process.exit(1)'
+```
+
+Expected result:
+
+```text
+route trace references .next/lock: false
+```
 
 ## 9. Update or shut down
 
-  To deploy later changes:
+For later changes:
 
-  git pull
-  npx vercel@latest
+```bash
+git pull
+npm run verify
+npx vercel@latest deploy --target=preview --force
+```
 
-  Again, do not use --prod.
+After the demo:
 
-  After the demo:
-
-  - Revoke the shareable link.
-  - Rotate the OpenAI key.
-  - Delete or pause the Vercel project if no longer needed.
-  - Monitor the Vercel Usage page while active.
+- revoke the shareable link;
+- rotate the OpenAI key;
+- delete or pause the project if it is no longer needed;
+- monitor the Vercel Usage page while it remains active.
