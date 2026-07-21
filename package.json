@@ -20,7 +20,7 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e"
   },
   "engines": {
-    "node": ">=22.11.0"
+    "node": "^22.11.0"
   },
   "overrides": {
     "postcss": "8.5.19"

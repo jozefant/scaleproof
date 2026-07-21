@@ -17,6 +17,7 @@ test-results/
 
 # Local tool state
 .serena/
+.vercel/
 
 # Generated reports
 output/
