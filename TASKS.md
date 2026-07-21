@@ -340,47 +340,6 @@ Acceptance:
   appears in logs or metrics.
 - Deployment happens only after explicit user authorization.
 
-### [ ] D.2 Prepare a controlled hackathon deployment
-
-Publish a protected preview for judges and invited testers, not an unrestricted
-public production service. This controlled demo does not replace or satisfy D.1.
-
-Implementation:
-
-1. Use Vercel Hobby with Fluid Compute, Node.js 22, the accepted Washington,
-   D.C. (`iad1`) execution region, and a generated `.vercel.app` preview URL.
-2. Protect the preview with Vercel Authentication and provide testers with a
-   revocable shareable link. Do not create a public production alias or custom
-   domain.
-3. Configure only `OPENAI_API_KEY`. Do not configure `GITHUB_TOKEN`, Upstash,
-   analytics, persistent storage, or other external services.
-4. Fund the OpenAI API separately from ChatGPT. Start with $10 prepaid credit
-   and disable automatic recharge; do not purchase hosting or a domain.
-5. Accept and document that anonymous GitHub access is limited to 60 REST API
-   requests per hour per hosting IP, so history evidence may become
-   rate-limited during the demo.
-6. Confirm that the 120-second analysis route and the repository working set
-   fit Vercel's deployed duration, memory, and writable `/tmp` limits.
-7. Run the full verification gate, then smoke-test authorized and unauthorized
-   access, the demo fixture, one public repository, cancellation, GPT retry
-   exhaustion, GitHub rate limiting, cleanup, and rollback.
-8. Record how to rotate the OpenAI secret, revoke the shareable link, stop the
-   service, and remove the deployment. Revoke access 30 days after launch
-   unless continuation is explicitly approved.
-
-Acceptance:
-
-- The deployment is inaccessible without Vercel authentication or the
-  revocable shareable link.
-- Invited testers can answer the three questions and receive a GPT-backed
-  report.
-- No hosting, domain, GitHub token, Upstash, analytics, or persistent-storage
-  purchase or setup is required.
-- No repository identifier, path, source, contributor identity, or secret
-  appears in platform logs.
-- Any future unrestricted public launch remains blocked on D.1.
-- Deployment happens only after explicit user authorization.
-
 ### [ ] D.3 Plan and de-risk the Node.js 24 upgrade
 
 Prepare a bounded migration plan before changing the production runtime. Keep
@@ -398,7 +357,7 @@ Implementation:
    only concrete incompatibilities, required upgrades, and removed behaviour.
 3. Run `npm ci`, `npm run verify`, and the complete Playwright suite under
    Node.js 24. Review saved browser screenshots and exercise the synthetic demo
-   through real OpenAI synthesis in a protected Preview deployment.
+   through real OpenAI synthesis in a protected Vercel deployment.
 4. Define one atomic implementation change covering the `engines` constraint,
    lockfile metadata, CI/runtime configuration, and concise documentation. Do
    not mix scanner, scoring, or UI changes into the runtime upgrade.
@@ -411,7 +370,7 @@ Acceptance:
 - The plan lists every file and Vercel setting that must change, with an owner,
   command, expected evidence, and rollback step; no implicit Node default
   remains.
-- Node.js 24 passes the full local gate and protected Preview smoke test,
+- Node.js 24 passes the full local gate and protected deployment smoke test,
   including synthetic GPT synthesis, before Production changes.
 - Saved Playwright screenshots show no desktop or 390 x 844 regression.
 - The production upgrade is a separate explicitly authorized implementation
@@ -435,6 +394,11 @@ Verified on 2026-07-21:
   `baseUrl` or inferred-`rootDir` migration defect.
 - The browser suite passed with an empty key and is protected from a dummy or
   ambient `OPENAI_API_KEY`.
+- The controlled Vercel Hobby deployment is Ready on Node.js 22 with Functions
+  in `iad1`. Its stable URL is protected, and an authenticated synthetic demo
+  returned a three-action GPT-5.6 report. Only `OPENAI_API_KEY` is configured;
+  recent platform logs contained only privacy-safe external-service diagnostics.
+  The deployment remains a controlled demo and does not satisfy D.1.
 - Desktop and 390 x 844 browser artifacts were reviewed for landing, selected
   context, processing, report summary, actions, and evidence. Keyboard focus is
   visibly demonstrated, and the mandatory-synthesis retry artifact shows its
