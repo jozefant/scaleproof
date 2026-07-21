@@ -1,6 +1,6 @@
 # OpenAI Build Week submission record
 
-Last verified against the challenge website: 18 July 2026.
+Submission guidance and materials last reviewed: 21 July 2026.
 
 ## Primary Codex thread
 
@@ -74,46 +74,27 @@ demo or verification suite.
 
 ## Devpost project story
 
-Paste the following into Devpost's **About the project** field.
-
 ```markdown
-## Inspiration
+##Inspiration  
+Founders need quick technical insights on codebases to determine its readiness for growth. Scaleproof provides an instant evaluation of a public GitHub repository, giving a clear guidance, if the codebase is 'Fundable', 'Fixable', or needs a 'Rewrite'.  Scaleproof recommends three actionable steps.
 
-Founders need quick technical insight into whether a codebase is ready for
-growth. Scaleproof evaluates a public GitHub repository as Fundable, Fixable, or
-Rewrite and provides up to three actionable next steps.
+##What it does  
+Scaleproof evaluates a GitHub repository in seven areas: architecture, quality, security, observability, reliability, data resilience, and AI readiness. It checks contributor activity and provides signals for scaling, along with a downloadable report. This tool offers a rapid analysis rather than a full audit, keeping missing evidence distinct from failures.
 
-## What it does
+##How I built it  
+Scaleproof is developed in Next.js and TypeScript, ensuring a clear separation of functions. It scans public repository URLs, performs static checks, gathers contributor data, and creates a validated report. GPT plays a supportive role, recommending remediation steps without dictating outcomes.
 
-Scaleproof evaluates architecture, quality, security, observability,
-reliability, data resilience, and AI readiness. It checks anonymous contributor
-concentration, provides scaling signals, and generates a downloadable report.
-It is an automated snapshot rather than an audit, and it keeps missing evidence
-separate from verified failures.
+I used Codex in at least two distinct sessions. The primary implementation session runs the research, architecture, implementation, tests, browser QA, and documentation. A separate Codex 'reviewer' session independently reviewed the results. The reviewer repeatedly found additional issues, which implementer fixed. That implementation-and-review loop made the final product more robust than a single-agent pass.
 
-## How I built it
+##Challenges I faced
+Establishing trust was crucial, so I ensured a clear distinction between missing evidence and verified issues. This was done with Codex/GPT help. The app scoring needs to be ballanced and refined further.
 
-Scaleproof uses Next.js and TypeScript with separate repository acquisition,
-deterministic analysis, AI synthesis, and report layers. It scans public
-repository URLs, applies bounded static checks, aggregates anonymous contributor
-data, and creates a schema-validated report. AI may prioritize allowlisted
-remediation steps but cannot change deterministic outcomes.
+Creating an appealing UI was another hurdle, which I overcame by guiding Codex to mimic a successful design and refining it through testing.
 
-I used Codex in multiple sessions for research, architecture, implementation,
-tests, browser QA, documentation, and independent review. The reviewer found
-additional defects that were fixed and reverified before release.
-
-## Challenges I faced
-
-Establishing trust was the central challenge. I kept missing evidence separate
-from verified issues, bounded all scanning, and prevented repository content
-from entering the AI payload.
-
-## What I learned
-
-AI is most useful here for prioritizing constrained, evidence-backed actions,
-not replacing technical evaluation. Privacy and transparent evidence states
-must be architectural decisions rather than report-writing details.
+##What I learned
+GPT implementer/reviewer combo worked well, as they both used the same task list.
+GPT also helped with admin tasks like generating Readme, License files etc.
+Clear separation between the repo scan, which is done without AI and the eval, which is GPT's job, is a useful pattern.
 ```
 
 ## Built with
@@ -128,8 +109,10 @@ Use these Devpost tags:
 
 - **Try it out / source:** [github.com/jozefant/scaleproof](https://github.com/jozefant/scaleproof)
 - **Demo site:** Pending. Do not enter an invented URL.
-- **Video:** Pending public YouTube upload; it must be shorter than three
-  minutes and include spoken explanation of both Codex and GPT-5.6 use.
+- **Video:** [Scaleproof demo on YouTube](https://youtu.be/QODx74zGVTI).
+  Paste this public or unlisted link into Devpost's **Video demo link** field.
+  Before submitting, watch it once to confirm clear audio and a spoken
+  explanation of what was built, how Codex was used, and how GPT-5.6 was used.
 - **Gallery:** Capture 3:2 screenshots from the synthetic demo only: the
   landing/intake page, a completed verdict with the three actions,
   growth-readiness and bus-factor sections, the evidence dossier, and the
@@ -147,9 +130,10 @@ Use these Devpost tags:
 - [x] Run `/feedback` in the primary thread and confirm the Session ID
 - [x] Repository visibility chosen: public
 - [x] Publish the repository (public; judge sharing is not required)
-- [ ] Record a public YouTube demo shorter than three minutes with audio
-- [ ] Show the product, Codex contribution, and GPT-5.6 use in the demo
-- [ ] Complete the Devpost description and submitter details
+- [x] Upload the YouTube demo and paste its link in Devpost: https://youtu.be/QODx74zGVTI
+- [ ] Watch the published video: confirm clear voiceover covers the product,
+  Codex contribution, and GPT-5.6 use, and that it is no longer than three minutes
+- [x] Complete the Devpost description and submitter details
 - [ ] Submit before 21 July 2026 at 17:00 PDT / 22 July 2026 at 02:00 CEST
 
 The [challenge page](https://openai.devpost.com/) and
