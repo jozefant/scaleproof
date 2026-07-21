@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  outputFileTracingExcludes: {
+    "/api/analyze": ["./.next/lock", "./.next/dev/**/*"],
+  },
   devIndicators:
     process.env.PLAYWRIGHT_TEST === "1" ? false : undefined,
   async headers() {
