@@ -14,7 +14,6 @@ const SKIPPED_DIRECTORIES = new Set([
   ".next",
   ".turbo",
   ".idea",
-  ".vscode",
   "build",
   "coverage",
   "dist",
@@ -54,9 +53,11 @@ const RELEVANT_EXTENSIONS = new Set([
   ".jsx",
   ".kt",
   ".kts",
+  ".key",
   ".md",
   ".mjs",
   ".php",
+  ".pem",
   ".properties",
   ".proto",
   ".prisma",
@@ -91,6 +92,9 @@ function isRelevantFile(fileName: string): boolean {
     return false;
   }
   if (RELEVANT_EXTENSIONLESS.has(lowerName)) {
+    return true;
+  }
+  if (lowerName === ".env") {
     return true;
   }
   if (lowerName.startsWith(".env.")) {
@@ -136,6 +140,9 @@ function scanPriority(relativePath: string): number {
       normalized,
     )
   ) {
+    return 1;
+  }
+  if (/(^|\/)(?:\.env(?:\.|$)|[^/]+\.(?:pem|key))$/i.test(normalized)) {
     return 1;
   }
   if (

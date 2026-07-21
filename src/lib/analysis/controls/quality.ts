@@ -1,6 +1,51 @@
 import * as signals from "../signals";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
+import type { EvidenceReference } from "../types";
+
+type TestFamily = "javascript" | "python" | "java";
+
+const TEST_FAMILY_PATTERNS: Record<TestFamily, RegExp[]> = {
+  javascript: [/\.(spec|test)\.[cm]?[jt]sx?$/i],
+  python: [/(^|\/)(?:test_[^/]*|[^/]+_test)\.py$/i, /(^|\/)tests?\/.*\.py$/i],
+  java: [/src\/test\/.*\.java$/i, /(^|\/)[^/]*Test\.java$/],
+};
+const RUNNER_PATTERNS: Record<TestFamily, RegExp> = {
+  javascript: /\b(vitest|jest|playwright|cypress)\b/i,
+  python: /\bpytest\b/i,
+  java: /\b(?:mvn(?:w)?\s+(?:test|verify)|gradle(?:w)?\s+test)\b/i,
+};
+const CI_PATH = [/^\.github\/workflows\//, /^\.circleci\//, /(^|\/)\.gitlab-ci\.ya?ml$/, /azure-pipelines\.ya?ml$/];
+
+function testFiles(index: Parameters<ControlEvaluator>[0], family?: TestFamily): EvidenceReference[] {
+  const patterns = family ? TEST_FAMILY_PATTERNS[family] : Object.values(TEST_FAMILY_PATTERNS).flat();
+  return signals.findPaths(index, patterns, 6);
+}
+
+function runnerEvidence(index: Parameters<ControlEvaluator>[0], family: TestFamily): EvidenceReference[] {
+  const packageScripts = signals.findContentMatching(index, (content) => {
+    try {
+      const manifest = JSON.parse(content) as { scripts?: Record<string, unknown> };
+      return Object.values(manifest.scripts ?? {}).some(
+        (script) => typeof script === "string" && RUNNER_PATTERNS[family].test(script),
+      );
+    } catch {
+      return false;
+    }
+  }, { pathPatterns: [/package\.json$/] });
+  const ciCommands = signals.findContent(index, [RUNNER_PATTERNS[family]], { pathPatterns: CI_PATH });
+  return signals.mergeEvidence(packageScripts, ciCommands);
+}
+
+function compatibleTestEvidence(index: Parameters<ControlEvaluator>[0]): EvidenceReference[] {
+  return signals.mergeEvidence(
+    ...(["javascript", "python", "java"] as const).flatMap((family) => {
+      const tests = testFiles(index, family);
+      const runners = runnerEvidence(index, family);
+      return tests.length > 0 && runners.length > 0 ? [tests, runners] : [];
+    }),
+  );
+}
 
 export const qualityDetectorMetadata = helpers.defineDetectorMetadata([
   {
@@ -73,8 +118,10 @@ export const qualityDetectorMetadata = helpers.defineDetectorMetadata([
 
 export function qualityControls(): ControlEvaluator[] {
   return [
-    (index) =>
-      helpers.positiveControl({
+    (index) => {
+      const tests = testFiles(index);
+      const enforced = compatibleTestEvidence(index);
+      return helpers.positiveControl({
         id: "quality.tests",
         domain: "quality",
         title: "Automated tests",
@@ -84,12 +131,10 @@ export function qualityControls(): ControlEvaluator[] {
         remediationCode: "add-test-layers",
         severity: "high",
         weight: 4,
-        enforced: signals.findPaths(index, [
-          /\.(spec|test)\.[cm]?[jt]sx?$/,
-          /src\/test\/.*\.java$/,
-          /(^|\/)tests?\//,
-        ]),
-      }),
+        enforced,
+        partial: tests,
+      });
+    },
     (index) => {
       const e2e = signals.findPaths(index, [
         /playwright/,
@@ -100,6 +145,7 @@ export function qualityControls(): ControlEvaluator[] {
         /\.(spec|test)\.[cm]?[jt]sx?$/,
         /src\/test\/.*\.java$/,
       ]);
+      const compatible = compatibleTestEvidence(index);
       return helpers.positiveControl({
         id: "quality.test-layers",
         domain: "quality",
@@ -111,7 +157,10 @@ export function qualityControls(): ControlEvaluator[] {
         remediationCode: "add-test-layers",
         severity: "medium",
         weight: 2,
-        enforced: unit.length > 0 && e2e.length > 0 ? signals.mergeEvidence(unit, e2e) : [],
+        enforced: unit.length > 0 && e2e.length > 0 && compatible.length > 0
+          ? signals.mergeEvidence(unit, e2e, compatible)
+          : [],
+        partial: signals.mergeEvidence(unit, e2e),
       });
     },
     (index) =>

@@ -1,6 +1,6 @@
 # Scaleproof implementation tasks
 
-Updated: 2026-07-20
+Updated: 2026-07-21
 
 This file is the current implementation backlog. Product boundaries belong in
 `README.md` and `AGENTS.md`; architecture, scoring, and security decisions
@@ -30,58 +30,25 @@ npm run test:e2e
 npm run verify
 ```
 
-### [ ] P0.8 Correct scanner evidence gaps exposed by the DeepType comparison
+### [ ] UI.1 Prevent the sticky report header from clipping section titles
 
-The controlled scan of `mawazawa/deeptype` found two critical false negatives
-(tracked external-service credentials and an unauthenticated, wildcard-CORS AI
-Edge Function that logs user content), plus reachability and test-evidence
-blind spots. Fix the evidence model before tuning weights or verdict thresholds.
-Do not add that repository's source, credentials, or history to this project;
-use minimal synthetic fixtures only.
-
-Implementation:
-
-1. Detect credential-shaped values in tracked `.env`-like, editor-tool, and
-   configuration files, including supported vendor prefixes and JWT-shaped
-   publishable tokens. Never retain or display a matched value; return only a
-   safe location and remediation code.
-2. Add Supabase/Edge cross-file controls for a disabled JWT requirement,
-   wildcard CORS, paid-provider calls, request/response logging, input limits,
-   authentication, and timeout evidence. Group correlated evidence into one
-   founder action.
-3. Trace browser `fetch` paths through framework routes, serverless handlers,
-   and deployment rewrites. Report a missing or shadowed backend route as a
-   concrete integration failure.
-4. Add entry-point reachability analysis and exclude generated code dumps,
-   conversation history, screenshots, test reports, and other generated
-   artefacts from positive implementation evidence. Reconcile controls that
-   make the same factual claim so they cannot silently contradict each other.
-5. Map discovered test files to a configured runner, package script, and CI
-   workflow. Credit test evidence as `enforced` only when an executable command
-   or CI workflow invokes that runner.
+The reviewed 1440x960 Playwright report-summary and evidence artifacts show the
+repository and evidence titles sitting flush against the sticky report header;
+the evidence-title glyphs are visibly clipped. This is a presentation defect
+and is intentionally separate from scanner and scoring behaviour.
 
 Acceptance:
 
-- Synthetic fixtures prove each secret family is detected without exposing its
-  value, and a concrete secret caps the verdict and takes action precedence.
-- A synthetic Supabase function with disabled JWT, wildcard CORS, a provider
-  call, and request-body logging yields a concrete security/privacy finding;
-  a secured equivalent does not.
-- A client API path with no handler or a deployment rewrite to the SPA is a
-  verified integration concern; a matching handler passes.
-- Unreachable feature code and generated artefacts cannot earn positive
-  statelessness, security, or test evidence. Conflicting control outcomes fail
-  the inventory/reconciliation test rather than reaching a report.
-- Test files without a wired runner remain missing evidence; a runner invoked
-  by a package script or CI workflow earns the documented/evidence tier stated
-  in `SCORING.md`.
-- Update detector metadata, `SCORING.md`, the heuristic version, and regression
-  fixtures together. Run no real-repository test unless explicitly requested.
+- Report and section titles have visible clearance below the sticky header after
+  report load and when scrolled into view at both 1440x960 and 390x844.
+- Strengthen the Playwright check to require visual clearance, not only that the
+  heading bounding box touches the header boundary.
+- Saved desktop and mobile report-summary screenshots show no clipped title,
+  horizontal overflow, or regression in the report controls.
 
 Validation:
 
 ```bash
-npm test -- src/lib/analysis src/lib/repository src/lib/application
 npm run test:e2e
 npm run verify
 ```
@@ -110,6 +77,62 @@ Acceptance:
 - Heuristic changes remain versioned and cannot silently change golden cases.
 - No claim says the heuristic is externally calibrated before this work is
   complete.
+
+### [ ] F.1 Build a local-first standalone founder edition
+
+This is a future product edition, not an expansion of the current hackathon
+service. The hosted app must remain limited to public GitHub root URLs and
+temporary analysis. The standalone edition lets a founder download and run
+Scaleproof against an explicitly selected local repository, including a private
+repository, without uploading source or repository identifiers.
+
+Before implementation, record an ADR selecting the distribution and runtime
+model (a signed desktop app is preferred; a local CLI plus localhost UI is an
+alternative), supported operating systems, update/signing model, and threat
+boundary.
+
+Implementation:
+
+1. Extract the deterministic scanner and application orchestration behind a
+   filesystem-repository adapter. Apply the current bounded traversal,
+   text/file/time limits, ignored-path rules, evidence model, and safe cleanup;
+   reject symlinks that resolve outside the selected root.
+2. Provide one local flow to select a repository root, validate it, show
+   progress and cancellation, and view or explicitly export a report. Do not
+   require a GitHub URL, repository upload, account, cloud storage, or API key
+   for deterministic analysis.
+3. Keep deterministic analysis and reports entirely local. Make GPT-5.6 action
+   prioritization opt-in; when enabled, retain the categorical allowlist,
+   explicit consent, `store: false`, and no-source/no-path/no-repository-ID
+   boundary. A fully offline deterministic report must remain available.
+4. Read local Git metadata only after founder authorization. Reduce identities
+   to opaque aggregates in memory; display no names, emails, or commit text;
+   and never write repository-derived data to application logs, telemetry,
+   crash reports, update checks, or support bundles.
+5. Package and sign the distribution. Verify updates separately from analysis
+   data and document local storage, deletion, export behaviour, permissions,
+   supported platforms, and the security response process.
+6. Add cross-platform automated tests using synthetic local repositories,
+   including private-looking directories, symlinks, cancellation, limits,
+   absent or denied filesystem permissions, offline mode, and opt-in AI payload
+   inspection. Do not use customer repositories in tests.
+
+Acceptance:
+
+- A founder can download and install the standalone edition (or use the
+  ADR-approved signed CLI), select a local repository, and receive the same
+  schema-valid deterministic report without network access or an API key.
+- The local edition reads no data outside the explicitly selected repository
+  root, follows no symlink outside it, and leaves no source, archive, or report
+  data behind except at an explicitly selected export location.
+- With AI disabled, no network requests occur. With AI enabled, a captured
+  payload proves it contains only the existing categorical allowlist and that
+  consent was recorded locally.
+- Native packaging and update artefacts are signed; tamper and rollback
+  behaviour is documented and tested on every supported operating system.
+- `README.md`, `docs/ARCHITECTURE.md`, `SECURITY.md`, and `SCORING.md`
+  distinguish the hosted public scan from the local-first edition. The hosted
+  public scan receives no private-repository or local-filesystem access.
 
 ### [ ] D.1 Satisfy the public-deployment security gate
 
@@ -174,15 +197,15 @@ Acceptance:
 
 ## Verification baseline
 
-Verified on 2026-07-20 after closing P1.5, P1.9, and P0.7:
+Verified on 2026-07-21:
 
 - Lint and TypeScript 6 and 7 passed.
-- `npm test`: 13 Vitest files / 125 tests passed.
+- `npm test`: 14 Vitest files / 137 tests passed.
 - `npm run build`: webpack production build passed.
 - `npm run test:e2e`: all 10 Playwright journeys passed from a fresh local
   server lifecycle.
-- The focused implementation suite passed 45 tests and the independent
-  SaaS-audit suite passed all 19 cases, including the evidence-cap,
+- The focused analysis, repository, and application suite passed 11 files / 101
+  tests. The SaaS-audit suite passed all 19 cases, including the evidence-cap,
   configured-instance, no-argument instance, and same-file mixed-instance
   regressions.
 - TypeScript 6.0.3 emitted no deprecation warnings. TypeScript 7.0.2 passed in
@@ -192,6 +215,7 @@ Verified on 2026-07-20 after closing P1.5, P1.9, and P0.7:
   ambient `OPENAI_API_KEY`.
 - Desktop and 390 x 844 browser artifacts were reviewed for landing, selected
   context, processing, report summary, actions, and evidence. Keyboard focus is
-  visibly demonstrated, report-section headings clear the sticky header, and
-  the mandatory-synthesis retry artifact shows its real attempt count plus the
-  cancel control. P0.6 remains open for its required API/browser boundary test.
+  visibly demonstrated, and the mandatory-synthesis retry artifact shows its
+  real attempt count plus the cancel control. UI.1 tracks the desktop title
+  clipping found under the sticky header in report and evidence views. P0.6
+  remains open for its required API/browser boundary test.

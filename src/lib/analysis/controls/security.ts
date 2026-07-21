@@ -2,6 +2,124 @@ import * as signals from "../signals";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
 
+const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g;
+const DIRECT_SECRET_PATTERNS = [
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bgh[pousr]_[A-Za-z0-9_]{30,}\b/,
+  /\bsk-[A-Za-z0-9_-]{32,}\b/,
+  /\bsb_secret_[A-Za-z0-9_-]{20,}\b/i,
+];
+const ASSIGNED_CREDENTIAL = /\b((?:[A-Za-z][A-Za-z0-9_-]*[_-])?(?:api[_-]?key|secret|password|token|service[_-]?role)[A-Za-z0-9_-]*)\s*[:=]\s*["']?([A-Za-z0-9_./+=-]{20,})/gi;
+
+function decodeJwtPayload(token: string): string | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const padded = payload.replaceAll("-", "+").replaceAll("_", "/").padEnd(
+      Math.ceil(payload.length / 4) * 4,
+      "=",
+    );
+    return atob(padded);
+  } catch {
+    return null;
+  }
+}
+
+function containsLikelySecret(content: string): boolean {
+  if (DIRECT_SECRET_PATTERNS.some((pattern) => pattern.test(content))) return true;
+
+  for (const tokenMatch of content.matchAll(JWT_PATTERN)) {
+    const claims = decodeJwtPayload(tokenMatch[0]);
+    if (/"role"\s*:\s*"(?:service_role|supabase_admin)"/i.test(claims ?? "")) {
+      return true;
+    }
+  }
+
+  for (const match of content.matchAll(ASSIGNED_CREDENTIAL)) {
+    const name = match[1]?.toLowerCase() ?? "";
+    if (/(?:^|[_-])(?:anon|publishable)(?:[_-]|$)/.test(name)) continue;
+    return true;
+  }
+  return false;
+}
+
+function escapedPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function edgeFunctionName(path: string): string | null {
+  return path.match(/^supabase\/functions\/([^/]+)\/index\.[cm]?[jt]s$/i)?.[1] ?? null;
+}
+
+function edgeConfigSection(content: string, functionName: string): string | null {
+  const header = new RegExp(`^\\s*\\[functions\\.${escapedPattern(functionName)}\\]\\s*$`, "im");
+  const match = header.exec(content);
+  if (!match || match.index === undefined) return null;
+  const rest = content.slice(match.index + match[0].length);
+  return rest.split(/^\s*\[/m, 1)[0] ?? "";
+}
+
+function normalizeApiRoute(route: string): string[] {
+  return route.replace(/[?#].*$/, "").replace(/^\/api\/?/, "").split("/").filter(Boolean);
+}
+
+function routeSegmentsMatch(route: string[], handler: string[]): boolean {
+  let routeIndex = 0;
+  for (let handlerIndex = 0; handlerIndex < handler.length; handlerIndex += 1) {
+    const segment = handler[handlerIndex]!;
+    if (/^\[\[\.\.\.[^\]]+\]\]$/.test(segment)) return true;
+    if (/^\[\.\.\.[^\]]+\]$/.test(segment)) return routeIndex < route.length;
+    if (routeIndex >= route.length) return false;
+    if (!/^\[[^\]]+\]$/.test(segment) && segment !== route[routeIndex]) return false;
+    routeIndex += 1;
+  }
+  return routeIndex === route.length;
+}
+
+function apiHandlerMatchesRoute(path: string, route: string[]): boolean {
+  const normalized = path.replaceAll("\\", "/").replace(/^\.\//, "");
+  const nextMatch = normalized.match(/^(?:src\/)?app\/api\/(.+)\/route\.[cm]?[jt]s$/i);
+  if (nextMatch?.[1]) return routeSegmentsMatch(route, nextMatch[1].split("/"));
+
+  const pagesMatch = normalized.match(/^(?:src\/)?pages\/api\/(.+)\.[cm]?[jt]sx?$/i);
+  if (pagesMatch?.[1]) return routeSegmentsMatch(route, pagesMatch[1].split("/"));
+
+  const serverlessMatch = normalized.match(/^(?:functions|api)\/(.+)\.[cm]?[jt]s$/i);
+  return serverlessMatch?.[1] ? routeSegmentsMatch(route, serverlessMatch[1].split("/")) : false;
+}
+
+function isSpaDocumentDestination(value: string): boolean {
+  return /^\/index\.html(?:\?.*)?$/i.test(value.trim());
+}
+
+function isCatchAllRoute(value: string): boolean {
+  return /^\/(?:\(\.\*\)|:[A-Za-z][A-Za-z0-9_]*\*|\*)$/.test(value.trim());
+}
+
+function netlifyRuleMatchesRoute(source: string, route: string): boolean {
+  if (source === route) return true;
+  if (source.endsWith("/*")) return route.startsWith(source.slice(0, -1));
+  return /^\/:?[A-Za-z][A-Za-z0-9_]*\*$/.test(source);
+}
+
+function hasSpaCatchAllRewrite(path: string, content: string, route: string): boolean {
+  if (/_redirects$/i.test(path)) {
+    for (const line of content.split(/\r?\n/)) {
+      const [source, destination] = line.trim().split(/\s+/);
+      if (!source || !destination || !netlifyRuleMatchesRoute(source, route)) continue;
+      return isCatchAllRoute(source) && isSpaDocumentDestination(destination);
+    }
+    return false;
+  }
+
+  const rewrite = /["']?(?:source|from)["']?\s*:\s*["']([^"']+)["'][\s\S]{0,240}?["']?(?:destination|to)["']?\s*:\s*["']([^"']+)["']/gi;
+  for (const match of content.matchAll(rewrite)) {
+    if (isCatchAllRoute(match[1] ?? "") && isSpaDocumentDestination(match[2] ?? "")) return true;
+  }
+  return false;
+}
+
 export const securityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "security.exposed-secret",
@@ -13,6 +131,26 @@ export const securityDetectorMetadata = helpers.defineDetectorMetadata([
     confidenceLimitation:
       "Pattern matching can miss encoded secrets and cannot establish revocation status.",
     remediationCode: "remove-exposed-secret",
+  },
+  {
+    id: "security.edge-function-boundary",
+    claim: "Supabase Edge Functions that call paid providers enforce authentication, bounded input, CORS, and timeout-safe handling.",
+    applicability: "Repositories containing Supabase Edge Functions.",
+    requiredSignals: ["Function authentication", "Restricted CORS", "Input limit", "Timeout evidence"],
+    disqualifyingSignals: ["Disabled JWT requirement", "Wildcard CORS", "Request or response logging beside a paid-provider call"],
+    strongestEvidenceTier: "enforced",
+    confidenceLimitation: "Static evidence cannot prove deployed function configuration, provider billing limits, or log retention.",
+    remediationCode: "harden-auth-boundary",
+  },
+  {
+    id: "security.client-route-reachability",
+    claim: "Browser API calls resolve to a visible backend handler and are not rewritten to a single-page application document.",
+    applicability: "Repositories with browser fetch paths.",
+    requiredSignals: ["Client API path", "Matching framework handler or serverless function"],
+    disqualifyingSignals: ["Missing handler", "Deployment rewrite from API path to SPA document"],
+    strongestEvidenceTier: "enforced",
+    confidenceLimitation: "Static matching cannot prove proxy behavior, runtime path construction, or deployed rewrite precedence.",
+    remediationCode: "add-quality-gate",
   },
   {
     id: "security.secret-gate",
@@ -107,15 +245,9 @@ export const securityDetectorMetadata = helpers.defineDetectorMetadata([
 export function securityControls(): ControlEvaluator[] {
   return [
     (index) => {
-      const likelySecrets = signals.findContent(
+      const likelySecrets = signals.findContentMatching(
         index,
-        [
-          /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-          /\bAKIA[0-9A-Z]{16}\b/,
-          /\bgh[pousr]_[A-Za-z0-9_]{30,}\b/,
-          /\bsk-[A-Za-z0-9_-]{32,}\b/,
-          /\b(?:api[_-]?key|secret|password|token)\s*[:=]\s*["'][A-Za-z0-9_./+=-]{20,}["']/i,
-        ],
+        containsLikelySecret,
         {
           excludePathPatterns: [
             /(^|\/)(test|tests|fixtures|examples?|docs)\//,
@@ -153,6 +285,166 @@ export function securityControls(): ControlEvaluator[] {
         weight: 5,
         outcome: index.snapshot.coverage.partial ? "unknown" : "pass",
         evidenceTier: index.snapshot.coverage.partial ? "runtime_only" : "inferred",
+      });
+    },
+    (index) => {
+      const clientCalls = signals.findContent(
+        index,
+        [/\bfetch\s*\(\s*['"]\/api\/[^'"?`]+/i],
+        {
+          pathPatterns: [/\.[cm]?[jt]sx?$/],
+          excludePathPatterns: [/(^|\/)(api|routes?|tests?|__tests__)\//],
+          maxResults: 6,
+          reachableSourceOnly: true,
+        },
+      );
+      const clientRoutes = new Set<string>();
+      for (const file of index.files) {
+        if (
+          !/\.[cm]?[jt]sx?$/i.test(file.normalizedPath) ||
+          !signals.isReachableImplementationEvidenceFile(index, file) ||
+          /(^|\/)(api|routes?|tests?|__tests__|docs?)\//i.test(file.path)
+        ) continue;
+        for (const match of file.content.matchAll(/\bfetch\s*\(\s*['"](\/api\/[^'"?`]+)/gi)) {
+          clientRoutes.add(match[1]);
+        }
+      }
+      if (clientRoutes.size === 0) {
+        return helpers.positiveControl({
+          id: "security.client-route-reachability",
+          domain: "security",
+          title: "Client API route reachability",
+          missingSummary: "No literal browser API path was found.",
+          passSummary: "Browser API paths resolve to visible handlers.",
+          remediationCode: "add-quality-gate",
+          severity: "high",
+          weight: 3,
+          applicable: false,
+        });
+      }
+
+      const missingOrShadowed = [...clientRoutes].filter((route) => {
+        const routeSegments = normalizeApiRoute(route);
+        const routePart = routeSegments.join("/").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const hasHandler = index.files.some(
+          (file) => signals.isImplementationEvidencePath(file.path) && apiHandlerMatchesRoute(file.path, routeSegments),
+        );
+        const shadowed = index.files.some(
+          (file) =>
+            /(?:vercel|netlify)\.json$|firebase\.json$|_redirects$/i.test(file.path) &&
+            (new RegExp(`(?:source|from)[^\\n]{0,120}${routePart}[^\\n]{0,180}(?:index\\.html|spa|destination[\\s\\S]{0,80}['"]\\/['"])`, "i").test(file.content) ||
+              hasSpaCatchAllRewrite(file.path, file.content, `/api/${routeSegments.join("/")}`)),
+        );
+        return !hasHandler || shadowed;
+      });
+      if (missingOrShadowed.length > 0) {
+        return helpers.result({
+          id: "security.client-route-reachability",
+          domain: "security",
+          title: "Client API path has no reachable backend handler",
+          summary: "A browser API path has no visible backend handler or is rewritten to the single-page application, so the integration will fail outside a mocked client flow.",
+          remediationCode: "add-quality-gate",
+          severity: "high",
+          weight: 3,
+          outcome: "fail",
+          evidenceTier: "enforced",
+          evidence: clientCalls,
+        });
+      }
+      return helpers.positiveControl({
+        id: "security.client-route-reachability",
+        domain: "security",
+        title: "Client API route reachability",
+        missingSummary: "Browser API paths need a visible backend handler.",
+        passSummary: "Browser API paths have matching repository handlers.",
+        remediationCode: "add-quality-gate",
+        severity: "high",
+        weight: 3,
+        enforced: clientCalls,
+      });
+    },
+    (index) => {
+      const edgeFunctions = signals.findPaths(index, [
+        /^supabase\/functions\/[^/]+\/index\.[cm]?[jt]s$/,
+      ]);
+      if (edgeFunctions.length === 0) {
+        return helpers.positiveControl({
+          id: "security.edge-function-boundary",
+          domain: "security",
+          title: "Supabase Edge Function boundary",
+          missingSummary: "No Supabase Edge Function was found.",
+          passSummary: "Supabase Edge Function controls are present.",
+          remediationCode: "harden-auth-boundary",
+          severity: "critical",
+          weight: 5,
+          applicable: false,
+        });
+      }
+
+      const config = index.files.find((file) => /^supabase\/config\.toml$/i.test(file.normalizedPath));
+      const providerPattern = /\b(openai|anthropic|stripe|resend)\b[\s\S]{0,160}\b(fetch|create|post)\b|\b(fetch|create|post)\b[\s\S]{0,160}\b(openai|anthropic|stripe|resend)\b/i;
+      const wildcardCorsPattern = /access-control-allow-origin[^\n]{0,80}['"`]\*['"`]/i;
+      const restrictedCorsPattern = /access-control-allow-origin[^\n]{0,80}['"`](?!\*)/i;
+      const requestLoggingPattern = /\b(console\.(?:log|info|debug)|logger\.(?:info|debug))\s*\([^)]*\b(request|body|response)\b/i;
+      const tokenPattern = /\b(?:auth\.)?(?:getuser|getclaims)\s*\(|\bjwtverify\s*\(/i;
+      const inputPattern = /\b(content-length|max(?:imum)?(?:input|body|tokens?)|limit\s*[:=]|zod|safeparse)\b/i;
+      const timeoutPattern = /\b(abortsignal\.timeout|timeout\s*[:=]|signal\s*:)\b/i;
+      const functionBoundaries = index.files.flatMap((file) => {
+        const name = edgeFunctionName(file.normalizedPath);
+        if (!name) return [];
+        const configSection = config ? edgeConfigSection(config.content, name) : null;
+        const providerCall = providerPattern.test(file.content);
+        const jwtDisabled = /verify_jwt\s*=\s*false/i.test(configSection ?? "");
+        const verifiedJwt = /verify_jwt\s*=\s*true/i.test(configSection ?? "");
+        const wildcardCors = wildcardCorsPattern.test(file.content);
+        const restrictedCors = restrictedCorsPattern.test(file.content);
+        const requestLogging = requestLoggingPattern.test(file.content);
+        const tokenValidated = tokenPattern.test(file.content);
+        const inputLimited = inputPattern.test(file.content);
+        const timeoutBounded = timeoutPattern.test(file.content);
+        const evidence = [
+          { path: file.path, kind: "code" as const },
+          ...(configSection !== null ? [{ path: config!.path, kind: "configuration" as const }] : []),
+        ];
+        return [{
+          providerCall,
+          unsafe: providerCall && (jwtDisabled || wildcardCors || requestLogging),
+          secured: providerCall && !jwtDisabled && !wildcardCors && restrictedCors && (verifiedJwt || tokenValidated) && inputLimited && timeoutBounded,
+          evidence,
+        }];
+      });
+      const providerBoundaries = functionBoundaries.filter((boundary) => boundary.providerCall);
+      const insecure = providerBoundaries.filter((boundary) => boundary.unsafe);
+      if (insecure.length > 0) {
+        return helpers.result({
+          id: "security.edge-function-boundary",
+          domain: "security",
+          title: "Supabase Edge Function exposes AI request data",
+          summary: "A Supabase Edge Function has a disabled or incomplete boundary around a provider call. Require JWT validation, restrict CORS, bound input, avoid request or response logging, and set a timeout.",
+          remediationCode: "harden-auth-boundary",
+          severity: "critical",
+          weight: 5,
+          outcome: "fail",
+          evidenceTier: "enforced",
+          evidence: signals.mergeEvidence(...insecure.map((boundary) => boundary.evidence)),
+        });
+      }
+
+      const secure = providerBoundaries.length > 0 && providerBoundaries.every((boundary) => boundary.secured);
+
+      return helpers.positiveControl({
+        id: "security.edge-function-boundary",
+        domain: "security",
+        title: "Supabase Edge Function boundary",
+        missingSummary: "Supabase Edge Functions do not show the complete authentication, CORS, input-limit, and timeout boundary.",
+        passSummary: "Supabase Edge Function evidence shows authentication, restricted CORS, bounded input, and timeout handling.",
+        remediationCode: "harden-auth-boundary",
+        severity: "critical",
+        weight: 5,
+        enforced: secure
+          ? signals.mergeEvidence(...providerBoundaries.map((boundary) => boundary.evidence))
+          : [],
+        partial: signals.mergeEvidence(...functionBoundaries.map((boundary) => boundary.evidence)),
       });
     },
     (index) =>
@@ -207,6 +499,7 @@ export function securityControls(): ControlEvaluator[] {
         {
           pathPatterns: [/\.[cm]?[jt]sx?$/, /\.java$/, /\.properties$/],
           excludePathPatterns: [/(^|\/)(test|tests|docs)\//],
+          reachableSourceOnly: true,
         },
       );
       const evidence =
@@ -243,6 +536,7 @@ export function securityControls(): ControlEvaluator[] {
         {
           pathPatterns: [/\.[cm]?[jt]sx?$/, /\.java$/, /\.rs$/, /\.py$/],
           excludePathPatterns: [/(^|\/)(test|tests|docs)\//],
+          reachableSourceOnly: true,
         },
       );
       return helpers.positiveControl({
@@ -283,11 +577,12 @@ export function securityControls(): ControlEvaluator[] {
           ],
           {
             pathPatterns: [
-              /\.[cm]?[jt]s$/,
+              /\.[cm]?[jt]sx?$/,
               /\.java$/,
               /\.properties$/,
               /\.ya?ml$/,
             ],
+            reachableSourceOnly: true,
           },
         ),
       }),
@@ -310,11 +605,12 @@ export function securityControls(): ControlEvaluator[] {
           ],
           {
             pathPatterns: [
-              /\.[cm]?[jt]s$/,
+              /\.[cm]?[jt]sx?$/,
               /\.java$/,
               /package\.json$/,
               /pom\.xml$/,
             ],
+            reachableSourceOnly: true,
           },
         ),
       }),

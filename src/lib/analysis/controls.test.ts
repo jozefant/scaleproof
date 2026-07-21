@@ -4,7 +4,7 @@ import { contextualizeGeneratedHistory, summarizeConcentration } from "@/lib/rep
 import type { RepositorySnapshot } from "@/lib/repository/types";
 
 import { evaluateControls } from "./controls";
-import { buildControlInventory } from "./control-inventory";
+import { buildControlInventory, reconcileControlOutcomes } from "./control-inventory";
 import type { ScanContext } from "./types";
 
 const UNKNOWN_CONTEXT: ScanContext = {
@@ -114,6 +114,16 @@ describe("context-sensitive controls", () => {
         "Executable load test, benchmark, command, or enforced performance budget",
       ],
     });
+  });
+
+  it("rejects contradictory evaluations of the same factual control", () => {
+    const checks = evaluateControls(lovableSnapshot(), UNKNOWN_CONTEXT);
+    const authentication = checks.find((check) => check.id === "security.authentication");
+    expect(authentication).toBeDefined();
+    expect(() => reconcileControlOutcomes([
+      ...checks,
+      { ...authentication!, outcome: authentication!.outcome === "fail" ? "pass" : "fail" },
+    ])).toThrow("Contradictory control outcomes for security.authentication");
   });
 
   it("does not score initial Lovable-export concentration as a bus-factor failure", () => {
@@ -351,7 +361,7 @@ describe("context-sensitive controls", () => {
       {
         path: "src/client.ts",
         content:
-          "const timeout = AbortSignal.timeout(1000); const idempotency = crypto.randomUUID();",
+          "import './auth'; const timeout = AbortSignal.timeout(1000); const idempotency = crypto.randomUUID();",
         size: 88,
       },
       {

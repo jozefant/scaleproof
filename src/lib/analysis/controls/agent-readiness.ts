@@ -100,6 +100,7 @@ export function agentReadinessControls(): ControlEvaluator[] {
       }),
     (index) => {
       const instructionFiles = index.files.filter((file) =>
+        signals.isImplementationEvidencePath(file.path) &&
         instructionPaths.some((pattern) => pattern.test(file.normalizedPath)),
       );
       const combined = instructionFiles.map((file) => file.content).join("\n");

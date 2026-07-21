@@ -4,6 +4,17 @@ import * as helpers from "./shared";
 
 export const architectureDetectorMetadata = helpers.defineDetectorMetadata([
   {
+    id: "arch.source-reachability",
+    claim: "Static source reachability completed without unresolved local imports.",
+    applicability: "JavaScript or TypeScript repositories with recognized application entry points.",
+    requiredSignals: ["All reachable local imports resolve to scanned source files"],
+    disqualifyingSignals: ["Unresolved local or configured-alias import"],
+    strongestEvidenceTier: "runtime_only",
+    confidenceLimitation:
+      "Static import tracing cannot resolve runtime module loading, generated modules, or imports outside the scan boundary.",
+    remediationCode: "add-quality-gate",
+  },
+  {
     id: "arch.onboarding",
     claim: "A reproducible onboarding path is documented.",
     applicability: "All repositories with a contributor workflow.",
@@ -103,6 +114,32 @@ export const architectureDetectorMetadata = helpers.defineDetectorMetadata([
 
 export function architectureControls(): ControlEvaluator[] {
   return [
+    (index) => {
+      if (!signals.hasIncompleteSourceReachability(index)) {
+        return helpers.positiveControl({
+          id: "arch.source-reachability",
+          domain: "architecture",
+          title: "Static source reachability",
+          missingSummary: "No incomplete source-reachability signal was found.",
+          passSummary: "Static source reachability completed without unresolved local imports.",
+          remediationCode: "add-quality-gate",
+          severity: "info",
+          weight: 1,
+          applicable: false,
+        });
+      }
+      return helpers.result({
+        id: "arch.source-reachability",
+        domain: "architecture",
+        title: "Static source reachability is incomplete",
+        summary: "At least one reachable local import could not be resolved inside the bounded scan. Proven-reachable files remain eligible, while unrelated source remains excluded.",
+        remediationCode: "add-quality-gate",
+        severity: "info",
+        weight: 1,
+        outcome: "unknown",
+        evidenceTier: "runtime_only",
+      });
+    },
     (index) => {
       const setupInstructions = signals.findContent(
         index,

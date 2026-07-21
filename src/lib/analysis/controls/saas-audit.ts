@@ -168,6 +168,7 @@ function sourceContent(index: Parameters<ControlEvaluator>[0], patterns: RegExp[
   return signals.findContent(index, patterns, {
     pathPatterns: SOURCE_PATHS,
     excludePathPatterns: [TEST_OR_FIXTURE_PATH],
+    reachableSourceOnly: true,
   });
 }
 
@@ -181,6 +182,8 @@ function requestContent(index: Parameters<ControlEvaluator>[0], patterns: RegExp
 function sourceFiles(index: Parameters<ControlEvaluator>[0]) {
   return index.files.filter(
     (file) =>
+      signals.isImplementationEvidencePath(file.path) &&
+      signals.isReachableImplementationEvidenceFile(index, file) &&
       SOURCE_PATHS.some((pattern) => pattern.test(file.normalizedPath)) &&
       !TEST_OR_FIXTURE_PATH.test(file.normalizedPath),
   );
@@ -364,7 +367,11 @@ export function saasAuditControls(): ControlEvaluator[] {
           .map((match) => (match[1] ?? match[2] ?? "").toLowerCase()),
       ).filter(Boolean);
       const indexedColumns = index.files
-        .filter((file) => /(^|\/)(migrations?|db)\/|flyway|liquibase|schema\.(sql|prisma)$/i.test(file.normalizedPath))
+        .filter(
+          (file) =>
+            signals.isImplementationEvidencePath(file.path) &&
+            /(^|\/)(migrations?|db)\/|flyway|liquibase|schema\.(sql|prisma)$/i.test(file.normalizedPath),
+        )
         .flatMap((file) =>
           [...file.content.matchAll(/\b(?:create\s+index[^\(]*\(|@index\s*\(\s*\[?|@@index\s*\(\s*\[?)(\w+)/gi)]
             .map((match) => match[1].toLowerCase()),
@@ -820,7 +827,11 @@ export function saasAuditControls(): ControlEvaluator[] {
       );
       const coveredAreas = new Set(
         index.files
-          .filter((file) => TEST_OR_FIXTURE_PATH.test(file.normalizedPath))
+          .filter(
+            (file) =>
+              signals.isImplementationEvidencePath(file.path) &&
+              TEST_OR_FIXTURE_PATH.test(file.normalizedPath),
+          )
           .map((file) => criticalAreaName(file.normalizedPath))
           .filter((area): area is string => area !== null),
       );

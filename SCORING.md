@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.7.0-hackathon`
+Version: `0.8.5-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -70,8 +70,42 @@ Every control pack defines typed metadata beside its evaluator:
 
 The inventory is built only from this static metadata, not from one scan's
 result. Verification fails if a control has missing metadata, unused metadata,
-duplicate metadata, or a remediation mismatch. There is no generic fallback
-rule.
+duplicate metadata, a remediation mismatch, or contradictory evaluations of
+the same factual control. This reconciliation runs before scoring and report
+assembly. There is no generic fallback rule.
+
+## P0.8 evidence hardening
+
+- Credential detection recognizes high-confidence private provider prefixes and
+  privileged JWT claims in tracked runtime, configuration, and editor settings.
+  Bounded text acquisition includes exact `.env`, `.pem`, and `.key` files;
+  binary and oversized material remains excluded.
+  Supabase `sb_publishable_...` keys and legacy `anon` JWTs are public client
+  credentials and do not create a secret finding; `sb_secret_...` and
+  `service_role` credentials do. It reports a path only; a matched value is
+  never retained in check evidence, reports, logs, or model payloads.
+- Each Supabase Edge Function is evaluated only against its own code and
+  matching `[functions.<name>]` configuration section. Disabled JWT
+  verification, wildcard CORS around provider calls, and request or response
+  logging are concrete critical concerns. Positive evidence requires configured
+  JWT verification or a token-validation call, restricted CORS, bounded input,
+  and timeout signals in that same function. Reading an `Authorization` header
+  alone is not authentication evidence.
+- Literal browser `/api/*` fetch paths are normalized before matching a visible
+  handler, including Next.js dynamic segments such as `[id]`, and must not be
+  rewritten to a single-page application document. Catch-all Vercel and Netlify
+  SPA rewrites are treated as shadowing a matching handler; fallbacks that
+  explicitly exclude `/api/*`, or are preceded by a matching Netlify API rule,
+  are not.
+- Generated bundles, coverage and browser reports, screenshots, and conversation
+  exports are excluded from implementation evidence. Where a conventional
+  JavaScript or TypeScript entry point is visible, only statically imported
+  source (including configured TypeScript/JavaScript aliases) can earn positive
+  source-code evidence; unresolved local imports are recorded as incomplete
+  reachability while only proven-reachable files remain eligible. Test files
+  earn enforced credit only when a compatible recognized runner is
+  invoked by an executable package script or CI workflow, not when it merely
+  appears in dependencies or test-tool configuration.
 
 `rel.load-tests` earns enforced evidence only from an executable load test,
 benchmark, configured command, or enforced performance budget. A

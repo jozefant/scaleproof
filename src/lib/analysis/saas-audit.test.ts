@@ -175,7 +175,7 @@ describe("SaaS 10x audit lens", () => {
       {
         path: "src/client.ts",
         content:
-          "fetch(url, { signal: AbortSignal.timeout(1000) }); const key = idempotencyKey;",
+          "import './auth/login'; import './config'; import './data'; import './flags'; import './observability'; import './tenant/repository'; fetch(url, { signal: AbortSignal.timeout(1000) }); const key = idempotencyKey;",
         size: 86,
       },
       {

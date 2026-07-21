@@ -33,9 +33,31 @@ const DETECTOR_METADATA: readonly DetectorMetadata[] = [
   ...saasAuditDetectorMetadata,
 ];
 
+/**
+ * A control ID represents one factual claim. Duplicate evaluations of that
+ * claim must agree before a draft is scored or assembled into a public report.
+ */
+export function reconcileControlOutcomes(checks: CheckResult[]): void {
+  const outcomesById = new Map<string, Set<CheckResult["outcome"]>>();
+  for (const check of checks) {
+    const outcomes = outcomesById.get(check.id) ?? new Set<CheckResult["outcome"]>();
+    outcomes.add(check.outcome);
+    outcomesById.set(check.id, outcomes);
+  }
+  for (const [id, outcomes] of outcomesById) {
+    if (outcomes.size > 1) {
+      throw new Error(`Contradictory control outcomes for ${id}: ${[...outcomes].join(", ")}.`);
+    }
+    if (checks.filter((check) => check.id === id).length > 1) {
+      throw new Error(`Duplicate control outcome for ${id}.`);
+    }
+  }
+}
+
 export function buildControlInventory(
   checks: CheckResult[],
 ): ControlInventoryEntry[] {
+  reconcileControlOutcomes(checks);
   const metadataById = new Map(
     DETECTOR_METADATA.map((metadata) => [metadata.id, metadata]),
   );

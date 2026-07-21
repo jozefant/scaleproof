@@ -37,6 +37,49 @@ describe("scanDirectory", () => {
     expect(result.coverage.partial).toBe(false);
   });
 
+  it("retains tracked editor settings for safe credential detection", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scaleproof-test-"));
+    temporaryDirectories.push(root);
+    await mkdir(path.join(root, ".vscode"), { recursive: true });
+    await writeFile(
+      path.join(root, ".vscode", "settings.json"),
+      '{ "serviceKey": "configured-at-runtime" }',
+    );
+
+    const result = await scanDirectory({
+      root,
+      repositoryLabel: "test/editor-settings",
+      sourceUrl: null,
+    });
+
+    expect(result.files.map((file) => file.path)).toContain(
+      ".vscode/settings.json",
+    );
+  });
+
+  it("acquires exact dotenv and text private-key files within scanner guards", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "scaleproof-test-"));
+    temporaryDirectories.push(root);
+    const dotenvSecret = `SERVICE_ROLE_TOKEN=${"a".repeat(24)}`;
+    const pemSecret = "-----BEGIN PRIVATE KEY-----\nsynthetic-pem";
+    const keySecret = "-----BEGIN RSA PRIVATE KEY-----\nsynthetic-key";
+    await writeFile(path.join(root, ".env"), dotenvSecret);
+    await writeFile(path.join(root, "private.pem"), pemSecret);
+    await writeFile(path.join(root, "private.key"), keySecret);
+    await writeFile(path.join(root, "binary.key"), Buffer.from([0, 1, 2]));
+
+    const result = await scanDirectory({
+      root,
+      repositoryLabel: "test/secret-acquisition",
+      sourceUrl: null,
+    });
+    expect(result.files.map((file) => file.path)).toEqual(
+      expect.arrayContaining([".env", "private.pem", "private.key"]),
+    );
+    expect(result.files.map((file) => file.path)).not.toContain("binary.key");
+
+  });
+
   it("marks the scan partial when the shared acquisition deadline is exhausted", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scaleproof-test-"));
     temporaryDirectories.push(root);

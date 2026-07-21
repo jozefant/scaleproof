@@ -107,6 +107,10 @@ the test date, analyzed commit SHA when available, scan outcome, and anomalies.
 
 - Keep modules independent so repository acquisition, deterministic analysis,
   AI synthesis, and presentation can evolve in parallel.
+- When a review finds a UI or visual problem, add it to `TASKS.md` as a
+  standalone `UI.n` task. Do not mix UI findings into business-logic, scanner,
+  scoring, security, or deployment tasks; cross-reference separate tasks when
+  one change depends on another.
 - Add or update tests for behavior changes, limits, scoring, evidence mapping,
   fallbacks, and privacy filters.
 - Use synthetic fixtures in tests. Do not place customer, private, or sensitive
@@ -117,6 +121,26 @@ the test date, analyzed commit SHA when available, scan outcome, and anomalies.
   stop and report the blocker instead of creating a branch.
 - Do not stage, commit, push, publish, or change repository settings unless the
   user explicitly authorizes that action.
+
+### Finite task-review protocol
+
+Use this protocol when an implementer and reviewer hand off a `TASKS.md` item:
+
+1. Before the final implementation pass, freeze a finite acceptance matrix in
+   the task. State supported inputs, expected outcomes, important negative
+   cases, and the highest system seam that must be tested. Use synthetic data.
+2. The implementer may record **Ready for review**, but must not change the task
+   to `[done]`. A green `npm run verify` is required, but it proves only the
+   encoded cases and is not independent acceptance.
+3. The reviewer checks the frozen matrix in one pass, preserves resolved work,
+   and records only remaining failures. The reviewer owns the transition to
+   `[done]` after every frozen case and the complete gate pass.
+4. After acceptance, add a newly discovered non-critical edge case as a separate
+   prioritized task; do not reopen the accepted task. Reopen it only for a
+   regression in the frozen matrix or a security/privacy invariant violation.
+5. For scanner or analysis work, test the complete relevant seam—normally
+   repository acquisition through analysis and safe evidence—not detector logic
+   alone. Do not scan a real repository unless the user explicitly requests it.
 
 ## Handoff checklist
 
