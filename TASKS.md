@@ -30,6 +30,192 @@ npm run test:e2e
 npm run verify
 ```
 
+### [ ] P0.9 Harden external-provider evidence and prevent security false positives
+
+A public-corpus comparison exposed a material blind spot: a Supabase Edge
+Function can invoke an external AI or media provider while visibly disabling
+JWT verification and allowing wildcard CORS, yet remain only a missing-evidence
+finding. Two adjacent controls can also pass from weak textual matches: an
+`authorization` header is not authorization enforcement, and a validation
+library dependency is not server-side input validation.
+
+Implementation:
+
+1. Generalize external-provider detection for Supabase Edge Functions. Cover
+   provider SDKs such as ElevenLabs, Deno `npm:` SDK imports, and direct
+   outbound HTTP calls without treating a fixed provider-name list as the
+   security boundary. A reachable external provider call with either
+   `verify_jwt = false`, wildcard CORS, or request/response logging must be a
+   concrete critical failure; preserve the existing evidence locations and
+   never include source snippets in the report.
+2. Make `security.authorization` require an enforceable server-side operation
+   (for example verified identity, role/permission check, middleware, or
+   versioned policy evidence). Do not pass from header names, comments,
+   dependency names, or browser-only code. Make `security.validation` require
+   a schema parse or equivalent bound in the reachable server handler; a
+   library declaration or browser-only form validation remains insufficient.
+3. Apply slow-work and failure-safety checks to recognized Edge Function
+   provider calls. Detect absent timeout, body/input limit, idempotency or safe
+   retry/backpressure evidence without asserting runtime behaviour that the
+   repository cannot prove.
+4. Add explicit repository-evidence controls for public generated objects and
+   paid external-provider abuse: server-side rate/quota or cost guard, bounded
+   input/output, and retention/deletion or expiration evidence. Keep deployed
+   storage policy, rate-limit state, and provider billing state as
+   `runtime_only` unless repository configuration proves them.
+5. Improve stack and reachability diagnostics: identify React/Vite, Supabase
+   Edge Functions, Deno, and recognized external-provider SDKs in addition to
+   the base language; resolve configured aliases consistently and report the
+   unresolved local import path only in internal test diagnostics, never in the
+   public report.
+6. Bump the heuristic version and update [`SCORING.md`](./SCORING.md) for every
+   changed control, severity, applicability, or action-selection outcome.
+
+Acceptance:
+
+- Synthetic fixtures cover an Edge Function with an external SDK, disabled JWT,
+  wildcard CORS, public object creation, and no request bounds. The boundary
+  result is `fail`, `critical`, and `enforced`; `harden-auth-boundary` is a
+  mandatory founder action ahead of growth-target preferences.
+- A generic `authorization` request header does not pass authorization; a
+  handler-level identity or permission check does. A validation package without
+  server-side parsing does not pass validation; a bounded handler parse does.
+- Edge Function external calls are applicable to slow-work and failure-safety
+  controls. Missing timeout/limit/abuse evidence is never silently classified
+  as not applicable.
+- Public-object lifecycle and paid-provider abuse findings distinguish verified
+  source evidence, missing evidence, and runtime-only claims; the report makes
+  no unsupported assertion about deployed RLS, storage, rate limits, billing,
+  or throughput.
+- Stack detection and source-reachability tests cover configured aliases and
+  the new platform signals. Public reports retain only safe existing evidence
+  paths and summaries.
+- Focused synthetic tests, `npm run test:e2e`, and `npm run verify` pass. No
+  real repository is used by automated tests or CI.
+
+### [ ] P0.10 Separate production execution evidence from test, generated, and offline tooling
+
+Corpus comparisons show that a security-sensitive multi-module repository can
+receive a critical exposed-secret verdict from explicitly non-production test
+properties, and request-path scalability findings from integration tests,
+generated UI primitives, database-only services, or one-off import scripts.
+Those paths remain useful evidence, but they must not be represented as a
+production credential leak or synchronous external dependency without
+execution-context proof.
+
+Implementation:
+
+1. Add a shared file-role classifier: production source, test/integration-test,
+   fixture/demo, generated/vendor, documentation, and offline/admin tooling.
+   Preserve the role internally; public reports continue to expose only safe
+   paths and summaries.
+2. Require `security.exposed-secret` to distinguish a credential-shaped value
+   in production/configuration scope from an explicitly non-production fixture.
+   Test-only values remain a review signal, but cannot create a critical
+   production-secret finding or `remove-exposed-secret` mandatory action unless
+   independent production-scope evidence exists.
+3. Restrict request-path database, slow-work, and failure-safety findings to
+   reachable production handlers and their production call graph. Do not infer
+   an external dependency from a database service call, migration, test, or
+   offline importer. Preserve real production N+1 and external-client findings.
+4. Recognize nested backend/frontend manifests, contract files, CI workflows,
+   and documented module boundaries when evaluating a repository-level module
+   layout. Do not require a root workspace manifest when the repository has
+   independently buildable nested modules.
+5. Bump the heuristic version and update [`SCORING.md`](./SCORING.md) for every
+   changed applicability, score, severity, or action-selection behaviour.
+
+Acceptance:
+
+- Synthetic multi-module fixtures prove that fixed test credentials, test
+  fixtures, generated UI code, migrations, and offline scripts cannot trigger
+  a critical production secret or request-path external-work failure by
+  themselves.
+- Equivalent production configuration or a reachable production external client
+  still produces the existing concrete failure and mandatory action where
+  applicable.
+- A nested backend/frontend fixture with separate manifests, API contract and
+  documented boundaries does not receive a missing module-boundaries finding.
+- Every changed finding reports its evidence role in internal tests; public
+  Markdown contains no role-derived source snippets, secret values, repository
+  identifiers, or contributor data.
+- Focused synthetic tests and `npm run verify` pass without using real
+  repositories in CI.
+
+### [ ] P1.0 Classify static frontend content separately from deploy-time runtime configuration
+
+A static React marketing site with only public image links was scored as having
+embedded runtime configuration, and received founder actions for backend-scale
+work even though its contact form has no submission path. Public content URLs,
+normal hyperlinks, and static asset references are not credentials or runtime
+service endpoints.
+
+Implementation:
+
+1. Tighten `saas.config-boundary` so a failure requires a value used as runtime
+   configuration, client/service initialization, credential, deployment
+   endpoint, or capacity setting. Do not fail it for ordinary `href`, image,
+   media, font, documentation, or static-content URLs.
+2. Add a static-frontend evidence profile for repositories that show a browser
+   bundle but no reachable server route, serverless function, persistence
+   client, submission handler, or external data write. Mark server-only
+   controls not applicable rather than treating absent backend implementation as
+   a production readiness failure.
+3. When a visible form has no submit/action/network path, report it as a
+   product-completeness signal. Do not invent data handling, authentication, or
+   resilience claims.
+4. Keep a client application with real API, Supabase, storage, authentication,
+   or database calls outside the static profile. Its data-boundary controls must
+   remain assessable.
+
+Acceptance:
+
+- A synthetic static landing page with public asset URLs and an inert form does
+  not fail runtime-configuration or database/external-work controls; it reports
+  the inert form without claiming a backend exists.
+- A client constructor, environment-bound endpoint, credential-shaped value, or
+  actual network/data call still triggers the appropriate existing control.
+- Founder actions for a static profile are relevant to the observed product
+  shape and never claim a measured production capacity or deployed backend.
+- Update heuristic version, [`SCORING.md`](./SCORING.md), focused tests, and
+  `npm run verify` in the same implementation change.
+
+### [ ] P1.1 Assess direct browser-to-BaaS data boundaries without mistaking client code for enforcement
+
+An authenticated browser application can call a BaaS database directly. Client
+session state and `user_id` predicates improve UX but do not prove server-side
+authorization; deployed row-level policies may be outside the repository. The
+scanner needs to state that boundary precisely and detect browser-side privacy
+risks without asserting unverified deployment state.
+
+Implementation:
+
+1. Detect direct Supabase (and comparable BaaS) Auth, table, storage, and
+  mutation usage in reachable browser code. Record a categorical client-data
+  boundary without sending source text to GPT.
+2. When direct mutations exist but versioned RLS/storage policy evidence is not
+   present, report missing repository evidence for the policy; do not claim the
+   deployed policy is absent or broken. Server-side policy/migration evidence
+   may improve the state only when it covers the accessed resource.
+3. Detect high-confidence browser logging of session, user, email, token, or
+   profile data as a privacy/log-redaction concern. Do not treat generic error
+   logging as personal-data leakage without a matching value flow.
+4. Distinguish real SDK data queries from DOM `select`, UI component names, and
+   generated component library text. Apply query-bound and data-lifecycle
+   checks only to real data-client operations.
+
+Acceptance:
+
+- Synthetic browser-BaaS fixtures prove that client-side identity predicates do
+  not pass server-side authorization, absent versioned policy evidence remains
+  an evidence gap, and matching policy evidence is attributed safely.
+- A session/email log in reachable browser code creates the intended privacy
+  finding; generic error logging and unrelated UI components do not.
+- Real client SDK queries remain eligible for bounded-query findings, while
+  generated UI `select` components do not contaminate their evidence.
+- Tests preserve the no-source/no-path-to-GPT boundary, heuristic version and
+  [`SCORING.md`](./SCORING.md) are updated, and `npm run verify` passes.
+
 ### [ ] UI.1 Prevent the sticky report header from clipping section titles
 
 The reviewed 1440x960 Playwright report-summary and evidence artifacts show the
