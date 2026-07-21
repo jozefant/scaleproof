@@ -144,6 +144,39 @@ describe("POST /api/analyze contract", () => {
     });
   });
 
+  it("keeps a missing OpenAI configuration founder-safe while logging its allowlisted category", async () => {
+    const originalKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const response = await handleAnalyzeRequest(
+        request({ source: "demo", context }),
+      );
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      await expect(response.json()).resolves.toEqual({
+        error:
+          "OpenAI could not complete the required action prioritization. Try this scan again.",
+        code: "synthesis_unavailable",
+      });
+      expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+        provider: "openai",
+        operation: "action_prioritization",
+        providerErrorCode: "configuration_missing_OPENAI_API_KEY",
+        retryDecision: "not_retried",
+      });
+    } finally {
+      if (originalKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = originalKey;
+      }
+      log.mockRestore();
+    }
+  });
+
   it("streams privacy-safe synthesis retry progress before the report", async () => {
     const response = streamAnalyzeRequest(
       request({ source: "demo", context }),

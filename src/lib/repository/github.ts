@@ -4,6 +4,14 @@ import path from "node:path";
 import { x as extractTar } from "tar";
 
 import { parsePublicGitHubRepositoryUrl } from "@/lib/shared/github-url";
+import {
+  createExternalServiceDiagnostics,
+  errorCodeForHttpStatus,
+  httpStatusClass,
+  isAbortError,
+  type ExternalServiceDiagnostics,
+  type ExternalServiceErrorCode,
+} from "@/lib/diagnostics/external-service";
 import type {
   RepositoryHistory,
   RepositorySnapshot,
@@ -120,26 +128,47 @@ function throwIfCancelled(signal?: AbortSignal): void {
   }
 }
 
+function githubFailureCode(
+  status: number | null,
+  timedOut: boolean,
+  signal?: AbortSignal,
+): ExternalServiceErrorCode {
+  if (signal?.aborted) {
+    return "cancelled";
+  }
+  if (timedOut) {
+    return "timeout";
+  }
+  return status === null ? "transport_failure" : errorCodeForHttpStatus(status);
+}
+
 async function fetchMetadata(
   location: GitHubRepositoryLocation,
   deadline: number,
   signal?: AbortSignal,
+  diagnostics: ExternalServiceDiagnostics = createExternalServiceDiagnostics(),
 ): Promise<{ defaultBranch: string }> {
-  throwIfCancelled(signal);
+  const startedAt = Date.now();
+  let timedOut = false;
+  let status: number | null = null;
   const controller = new AbortController();
-  const remainingMs = deadline - Date.now();
-  if (remainingMs <= 0) {
-    throw new RepositoryAcquisitionError(
-      "The 90-second repository acquisition limit was reached.",
-      "duration_limit",
-    );
-  }
+  const remainingMs = deadline - startedAt;
   const timeout = setTimeout(
-    () => controller.abort(),
-    Math.min(15_000, remainingMs),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    Math.max(0, Math.min(15_000, remainingMs)),
   );
 
   try {
+    throwIfCancelled(signal);
+    if (remainingMs <= 0) {
+      throw new RepositoryAcquisitionError(
+        "The 90-second repository acquisition limit was reached.",
+        "duration_limit",
+      );
+    }
     const response = await fetch(
       `https://api.github.com/repos/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repository)}`,
       {
@@ -148,6 +177,7 @@ async function fetchMetadata(
         cache: "no-store",
       },
     );
+    status = response.status;
 
     if (response.status === 404) {
       throw new RepositoryAcquisitionError(
@@ -179,12 +209,36 @@ async function fetchMetadata(
       );
     }
 
+    diagnostics.terminal({
+      provider: "github",
+      operation: "repository_metadata",
+      attempt: 1,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      outcome: "success",
+      statusClass: httpStatusClass(status),
+      providerErrorCode: "none",
+      retryDecision: "not_needed",
+    });
     return { defaultBranch: metadata.default_branch };
   } catch (error) {
+    const providerErrorCode = githubFailureCode(status, timedOut, signal);
+    diagnostics.terminal({
+      provider: "github",
+      operation: "repository_metadata",
+      attempt: 1,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      outcome: providerErrorCode === "cancelled" ? "cancelled" : "failure",
+      statusClass: httpStatusClass(status),
+      providerErrorCode,
+      retryDecision:
+        providerErrorCode === "cancelled" ? "cancelled" : "not_retried",
+    });
     if (error instanceof RepositoryAcquisitionError) {
       throw error;
     }
-    throwIfCancelled(signal);
+    if (signal?.aborted || isAbortError(error) && !timedOut) {
+      throwIfCancelled(signal);
+    }
     if (Date.now() >= deadline) {
       throw new RepositoryAcquisitionError(
         "The 90-second repository acquisition limit was reached.",
@@ -206,22 +260,29 @@ async function downloadArchive(
   destination: string,
   deadline: number,
   signal?: AbortSignal,
+  diagnostics: ExternalServiceDiagnostics = createExternalServiceDiagnostics(),
 ): Promise<void> {
-  throwIfCancelled(signal);
+  const startedAt = Date.now();
+  let timedOut = false;
+  let status: number | null = null;
   const controller = new AbortController();
-  const remainingMs = deadline - Date.now();
-  if (remainingMs <= 0) {
-    throw new RepositoryAcquisitionError(
-      "The 90-second repository acquisition limit was reached.",
-      "duration_limit",
-    );
-  }
+  const remainingMs = deadline - startedAt;
   const timeout = setTimeout(
-    () => controller.abort(),
-    Math.min(30_000, remainingMs),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    Math.max(0, Math.min(30_000, remainingMs)),
   );
 
   try {
+    throwIfCancelled(signal);
+    if (remainingMs <= 0) {
+      throw new RepositoryAcquisitionError(
+        "The 90-second repository acquisition limit was reached.",
+        "duration_limit",
+      );
+    }
     const response = await fetch(
       `https://codeload.github.com/${encodeURIComponent(location.owner)}/${encodeURIComponent(location.repository)}/tar.gz/${encodeURIComponent(branch)}`,
       {
@@ -229,6 +290,7 @@ async function downloadArchive(
         cache: "no-store",
       },
     );
+    status = response.status;
     if (!response.ok || !response.body) {
       throw new RepositoryAcquisitionError(
         "GitHub could not provide the repository archive.",
@@ -260,11 +322,35 @@ async function downloadArchive(
     } finally {
       await fileHandle.close();
     }
+    diagnostics.terminal({
+      provider: "github",
+      operation: "archive_download",
+      attempt: 1,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      outcome: "success",
+      statusClass: httpStatusClass(status),
+      providerErrorCode: "none",
+      retryDecision: "not_needed",
+    });
   } catch (error) {
+    const providerErrorCode = githubFailureCode(status, timedOut, signal);
+    diagnostics.terminal({
+      provider: "github",
+      operation: "archive_download",
+      attempt: 1,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      outcome: providerErrorCode === "cancelled" ? "cancelled" : "failure",
+      statusClass: httpStatusClass(status),
+      providerErrorCode,
+      retryDecision:
+        providerErrorCode === "cancelled" ? "cancelled" : "not_retried",
+    });
     if (error instanceof RepositoryAcquisitionError) {
       throw error;
     }
-    throwIfCancelled(signal);
+    if (signal?.aborted || isAbortError(error) && !timedOut) {
+      throwIfCancelled(signal);
+    }
     if (Date.now() >= deadline) {
       throw new RepositoryAcquisitionError(
         "The 90-second repository acquisition limit was reached.",
@@ -286,6 +372,7 @@ async function fetchRecentContributorKeys(
   scope: string | null,
   deadline: number,
   signal?: AbortSignal,
+  diagnostics: ExternalServiceDiagnostics = createExternalServiceDiagnostics(),
 ): Promise<{
   availability: "available" | "rate_limited" | "unavailable";
   remaining: number | null;
@@ -295,9 +382,27 @@ async function fetchRecentContributorKeys(
     commitDates: number[];
   };
 }> {
+  const startedAt = Date.now();
+  let status: number | null = null;
+  const terminal = (
+    outcome: "cancelled" | "failure" | "success",
+    providerErrorCode: ExternalServiceErrorCode,
+  ): void => {
+    diagnostics.terminal({
+      provider: "github",
+      operation: "commit_history",
+      attempt: 1,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      outcome,
+      statusClass: httpStatusClass(status),
+      providerErrorCode,
+      retryDecision: outcome === "cancelled" ? "cancelled" : "not_retried",
+    });
+  };
   throwIfCancelled(signal);
   const remainingMs = deadline - Date.now();
   if (remainingMs <= 0) {
+    terminal("failure", "timeout");
     return { availability: "unavailable", remaining: null };
   }
 
@@ -323,12 +428,19 @@ async function fetchRecentContributorKeys(
         cache: "no-store",
       },
     );
+    status = response.status;
     const remainingHeader = response.headers.get("x-ratelimit-remaining");
     const remaining =
       remainingHeader !== null && /^\d+$/.test(remainingHeader)
         ? Number(remainingHeader)
         : null;
     if (!response.ok) {
+      terminal(
+        "failure",
+        response.status === 403 || response.status === 429 || remaining === 0
+          ? "rate_limited"
+          : errorCodeForHttpStatus(status),
+      );
       return {
         availability:
           response.status === 403 ||
@@ -342,6 +454,7 @@ async function fetchRecentContributorKeys(
 
     const commits = (await response.json()) as GitHubCommit[];
     if (!Array.isArray(commits)) {
+      terminal("failure", "invalid_response");
       return { availability: "unavailable", remaining };
     }
 
@@ -370,6 +483,7 @@ async function fetchRecentContributorKeys(
       }
     }
 
+    terminal("success", "none");
     return {
       availability: "available",
       remaining,
@@ -380,7 +494,11 @@ async function fetchRecentContributorKeys(
       },
     };
   } catch {
-    throwIfCancelled(signal);
+    if (signal?.aborted) {
+      terminal("cancelled", "cancelled");
+      throwIfCancelled(signal);
+    }
+    terminal("failure", "transport_failure");
     return { availability: "unavailable", remaining: null };
   } finally {
     clearTimeout(timeout);
@@ -393,6 +511,7 @@ async function fetchRepositoryHistory(
   snapshot: RepositorySnapshot,
   deadline: number,
   signal?: AbortSignal,
+  diagnostics: ExternalServiceDiagnostics = createExternalServiceDiagnostics(),
 ): Promise<RepositoryHistory> {
   const moduleScopes = deriveMajorModuleScopes(snapshot.files);
   const repositoryResult = await fetchRecentContributorKeys(
@@ -401,6 +520,7 @@ async function fetchRepositoryHistory(
     null,
     deadline,
     signal,
+    diagnostics,
   );
 
   if (!repositoryResult.sample) {
@@ -435,6 +555,7 @@ async function fetchRepositoryHistory(
       scope,
       deadline,
       signal,
+      diagnostics,
     );
     moduleSamples.push(result);
     if (result.remaining !== null) {
@@ -526,6 +647,7 @@ async function extractRepositoryArchive(
 export async function acquirePublicRepository(
   repositoryUrl: string,
   signal?: AbortSignal,
+  diagnostics: ExternalServiceDiagnostics = createExternalServiceDiagnostics(),
 ): Promise<RepositorySnapshot> {
   const startedAt = Date.now();
   const deadline = startedAt + SCAN_LIMITS.durationMs;
@@ -535,13 +657,14 @@ export async function acquirePublicRepository(
 
   try {
     throwIfCancelled(signal);
-    const metadata = await fetchMetadata(location, deadline, signal);
+    const metadata = await fetchMetadata(location, deadline, signal, diagnostics);
     await downloadArchive(
       location,
       metadata.defaultBranch,
       archivePath,
       deadline,
       signal,
+      diagnostics,
     );
     await extractRepositoryArchive(archivePath, tempRoot, signal);
 
@@ -566,6 +689,7 @@ export async function acquirePublicRepository(
       snapshot,
       deadline,
       signal,
+      diagnostics,
     );
     return { ...snapshot, history };
   } catch (error) {

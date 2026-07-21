@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.5-hackathon`
+Version: `0.8.6-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -482,6 +482,28 @@ remediation always remains first.
 
 GPT may reorder only the resulting target-aware allowlisted actions. It cannot
 add, remove, or alter the deterministic action candidates.
+
+## External-service diagnostics
+
+External calls write one terminal structured event to server logs. The event is
+limited to an independently generated correlation ID, provider, operation,
+attempt, duration, outcome, HTTP status class, allowlisted error code, and
+retry decision. It never serializes an error, request, response, model payload,
+repository URL or name, branch, file path, archive bytes, credential, header,
+cookie, commit, contributor, or source text.
+
+Successful events use informational logging, cancellations use warning logging,
+and failures use error logging. This keeps healthy external calls out of Vercel
+error-log queries while retaining diagnosable failure events.
+
+OpenAI synthesis records configuration, authentication, rate-limit, 5xx,
+timeout, cancellation, transport, malformed-output, and rejected-priority
+outcomes separately. `configuration_missing_OPENAI_API_KEY` is an allowlisted
+diagnostic code: it identifies the missing variable without recording any
+representation of its value. Local structured-output validation is not retried
+or labelled as a provider outage. GitHub metadata, archive download, and
+history calls use the same terminal-event contract. Public API errors remain
+founder-safe and `no-store`.
 
 ## Scan and model limits
 

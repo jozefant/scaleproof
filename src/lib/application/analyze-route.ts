@@ -13,6 +13,10 @@ import {
   acquirePublicRepository,
   RepositoryAcquisitionError,
 } from "@/lib/repository/github";
+import {
+  createExternalServiceDiagnostics,
+  type ExternalServiceDiagnostics,
+} from "@/lib/diagnostics/external-service";
 import type { RepositorySnapshot } from "@/lib/repository/types";
 import type {
   AnalysisReport,
@@ -71,12 +75,14 @@ export interface AnalyzeRouteDependencies {
   acquirePublic: (
     repositoryUrl: string,
     signal?: AbortSignal,
+    diagnostics?: ExternalServiceDiagnostics,
   ) => Promise<RepositorySnapshot>;
   analyze: (
     snapshot: RepositorySnapshot,
     context: ScanContext,
     signal?: AbortSignal,
     onSynthesisRetry?: SynthesisRetryHandler,
+    diagnostics?: ExternalServiceDiagnostics,
   ) => Promise<AnalysisReport>;
 }
 
@@ -99,10 +105,11 @@ function testMandatorySynthesis(input: SynthesisInput): Promise<SynthesisResult>
 const DEFAULT_DEPENDENCIES: AnalyzeRouteDependencies = {
   acquireDemo: acquireDemoRepository,
   acquirePublic: acquirePublicRepository,
-  analyze: (snapshot, context, signal, onSynthesisRetry) =>
+  analyze: (snapshot, context, signal, onSynthesisRetry, diagnostics) =>
     analyzeRepository(snapshot, context, {
       signal,
       onSynthesisRetry,
+      diagnostics,
       synthesize:
         process.env.PLAYWRIGHT_TEST === "1" ? testMandatorySynthesis : undefined,
     }),
@@ -114,6 +121,7 @@ export async function handleAnalyzeRequest(
   onSynthesisRetry?: SynthesisRetryHandler,
 ): Promise<Response> {
   try {
+    const diagnostics = createExternalServiceDiagnostics();
     const contentLength = Number(request.headers.get("content-length") ?? "0");
     if (contentLength > 8_192) {
       return Response.json(
@@ -158,6 +166,7 @@ export async function handleAnalyzeRequest(
         : await dependencies.acquirePublic(
             parsed.data.repositoryUrl ?? "",
             request.signal,
+            diagnostics,
           );
 
     const report = await dependencies.analyze(
@@ -165,6 +174,7 @@ export async function handleAnalyzeRequest(
       parsed.data.context,
       request.signal,
       onSynthesisRetry,
+      diagnostics,
     );
     return Response.json(report, {
       status: 200,

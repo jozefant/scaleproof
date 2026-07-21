@@ -7,6 +7,7 @@ import {
 import { analyzeSnapshot } from "@/lib/analysis/analyze";
 import { selectDeterministicActions } from "@/lib/analysis/actions";
 import { HEURISTIC_VERSION } from "@/lib/analysis/constants";
+import type { ExternalServiceDiagnostics } from "@/lib/diagnostics/external-service";
 import type { ScanContext } from "@/lib/analysis/types";
 import type { RepositorySnapshot } from "@/lib/repository/types";
 import {
@@ -22,6 +23,7 @@ export interface AnalyzeRepositoryOptions {
   ) => Promise<SynthesisResult>;
   onSynthesisRetry?: SynthesisRetryHandler;
   signal?: AbortSignal;
+  diagnostics?: ExternalServiceDiagnostics;
 }
 
 function throwIfCancelled(signal?: AbortSignal): void {
@@ -73,6 +75,7 @@ export async function analyzeRepository(
     ? await options.synthesize(synthesisInput, options.onSynthesisRetry)
     : await synthesizeFounderActions(synthesisInput, {
         onRetry: options.onSynthesisRetry,
+        diagnostics: options.diagnostics,
       });
 
   return parseAnalysisReport({

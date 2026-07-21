@@ -23,6 +23,15 @@ import {
   mandatoryRemediationCodes,
   reconcileActionProposal,
 } from "@/lib/analysis/actions";
+import {
+  createExternalServiceDiagnostics,
+  errorCodeForHttpStatus,
+  httpStatusClass,
+  isAbortError,
+  statusFromError,
+  type ExternalServiceDiagnostics,
+  type ExternalServiceErrorCode,
+} from "@/lib/diagnostics/external-service";
 
 const ActionSchema = z.object({
   remediationCode: z.string().min(1).max(80),
@@ -100,6 +109,7 @@ export interface SynthesisDependencies {
   now?: () => number;
   random?: () => number;
   onRetry?: (attempt: number, delayMs: number) => void;
+  diagnostics?: ExternalServiceDiagnostics;
 }
 
 export type SynthesisRetryHandler = NonNullable<
@@ -110,6 +120,10 @@ export class MandatorySynthesisError extends Error {
   constructor(
     public readonly code: "synthesis_unavailable" | "synthesis_misconfigured",
     message: string,
+    public readonly diagnosticCode: Extract<
+      ExternalServiceErrorCode,
+      "configuration_missing_OPENAI_API_KEY" | "malformed_output" | "rejected_priorities"
+    > = "malformed_output",
   ) {
     super(message);
     this.name = "MandatorySynthesisError";
@@ -222,18 +236,6 @@ export function buildAllowlistedPayload(input: SynthesisInput): {
   };
 }
 
-function statusFor(error: unknown): number | null {
-  if (typeof error !== "object" || error === null) {
-    return null;
-  }
-  const candidate = error as {
-    status?: unknown;
-    response?: { status?: unknown };
-  };
-  const status = candidate.status ?? candidate.response?.status;
-  return typeof status === "number" ? status : null;
-}
-
 function retryAfterMs(error: unknown, now: number): number | null {
   if (typeof error !== "object" || error === null) {
     return null;
@@ -259,12 +261,44 @@ function retryAfterMs(error: unknown, now: number): number | null {
 }
 
 function isTransient(error: unknown): boolean {
-  const status = statusFor(error);
+  if (error instanceof MandatorySynthesisError) {
+    return false;
+  }
+  const status = statusFromError(error);
   return status === null || status === 408 || status === 429 || status >= 500;
 }
 
-function unusableResponse(message: string): MandatorySynthesisError {
-  return new MandatorySynthesisError("synthesis_unavailable", message);
+function unusableResponse(
+  message: string,
+  diagnosticCode: Extract<
+    ExternalServiceErrorCode,
+    "malformed_output" | "rejected_priorities"
+  > = "malformed_output",
+): MandatorySynthesisError {
+  return new MandatorySynthesisError(
+    "synthesis_unavailable",
+    message,
+    diagnosticCode,
+  );
+}
+
+function failureCode(error: unknown): ExternalServiceErrorCode {
+  if (error instanceof MandatorySynthesisError) {
+    return error.diagnosticCode;
+  }
+  // The OpenAI SDK wraps an aborted request signal in APIUserAbortError. User
+  // cancellation is handled first in the caller; reaching this branch means
+  // the per-attempt timeout signal caused the abort.
+  if (error instanceof OpenAI.APIUserAbortError) {
+    return "timeout";
+  }
+  if (isAbortError(error)) {
+    return error instanceof DOMException && error.name === "TimeoutError"
+      ? "timeout"
+      : "cancelled";
+  }
+  const status = statusFromError(error);
+  return status === null ? "transport_failure" : errorCodeForHttpStatus(status);
 }
 
 async function sleepWithAbort(milliseconds: number, signal?: AbortSignal): Promise<void> {
@@ -290,18 +324,33 @@ export async function synthesizeFounderActions(
   dependencies: SynthesisDependencies = {},
 ): Promise<SynthesisResult> {
   throwIfCancelled(input.signal);
-  const built = buildAllowlistedPayload(input);
-  if (!dependencies.requestProposal && !process.env.OPENAI_API_KEY) {
+  const diagnostics = dependencies.diagnostics ?? createExternalServiceDiagnostics();
+  const startedAt = (dependencies.now ?? Date.now)();
+  const configuredApiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!dependencies.requestProposal && !configuredApiKey) {
+    diagnostics.terminal({
+      provider: "openai",
+      operation: "action_prioritization",
+      attempt: 0,
+      durationMs: 0,
+      outcome: "failure",
+      statusClass: "none",
+      providerErrorCode: "configuration_missing_OPENAI_API_KEY",
+      retryDecision: "not_retried",
+    });
     throw new MandatorySynthesisError(
       "synthesis_misconfigured",
       "Mandatory GPT synthesis is not configured. Try again after OpenAI is available.",
+      "configuration_missing_OPENAI_API_KEY",
     );
   }
+  const built = buildAllowlistedPayload(input);
   if (built.total === 0) {
     throw unusableResponse("Mandatory GPT synthesis received no actionable findings.");
   }
 
-  const requestProposal = dependencies.requestProposal ?? requestOpenAiProposal;
+  const requestProposal = dependencies.requestProposal ?? ((payload, signal) =>
+    requestOpenAiProposal(payload, configuredApiKey as string, signal));
   const sleep = dependencies.sleep ?? sleepWithAbort;
   const now = dependencies.now ?? Date.now;
   const random = dependencies.random ?? Math.random;
@@ -321,8 +370,21 @@ export async function synthesizeFounderActions(
         mandatoryRemediationCodes(input.checks),
       );
       if (!actions) {
-        throw unusableResponse("GPT-5.6 returned unsupported mandatory priorities.");
+        throw unusableResponse(
+          "GPT-5.6 returned unsupported mandatory priorities.",
+          "rejected_priorities",
+        );
       }
+      diagnostics.terminal({
+        provider: "openai",
+        operation: "action_prioritization",
+        attempt,
+        durationMs: Math.max(0, now() - startedAt),
+        outcome: "success",
+        statusClass: "2xx",
+        providerErrorCode: "none",
+        retryDecision: attempt === 1 ? "not_needed" : "completed_after_retry",
+      });
       return {
         actions,
         meta: {
@@ -339,8 +401,36 @@ export async function synthesizeFounderActions(
         },
       };
     } catch (error) {
-      throwIfCancelled(input.signal);
+      if (input.signal?.aborted) {
+        diagnostics.terminal({
+          provider: "openai",
+          operation: "action_prioritization",
+          attempt,
+          durationMs: Math.max(0, now() - startedAt),
+          outcome: "cancelled",
+          statusClass: httpStatusClass(statusFromError(error)),
+          providerErrorCode: "cancelled",
+          retryDecision: "cancelled",
+        });
+        throwIfCancelled(input.signal);
+      }
+      const providerErrorCode = failureCode(error);
       if (!isTransient(error) || attempt === MAX_SYNTHESIS_ATTEMPTS) {
+        diagnostics.terminal({
+          provider: "openai",
+          operation: "action_prioritization",
+          attempt,
+          durationMs: Math.max(0, now() - startedAt),
+          outcome: providerErrorCode === "cancelled" ? "cancelled" : "failure",
+          statusClass: httpStatusClass(statusFromError(error)),
+          providerErrorCode,
+          retryDecision:
+            providerErrorCode === "cancelled"
+              ? "cancelled"
+              : attempt === MAX_SYNTHESIS_ATTEMPTS
+                ? "retry_exhausted"
+                : "not_retried",
+        });
         throw error instanceof MandatorySynthesisError
           ? error
           : new MandatorySynthesisError(
@@ -353,6 +443,16 @@ export async function synthesizeFounderActions(
       const baseDelay = requestedDelay ?? RETRY_DELAYS_MS[attempt - 1];
       const delay = requestedDelay ?? Math.round(baseDelay * (0.8 + random() * 0.4));
       if (remaining <= delay) {
+        diagnostics.terminal({
+          provider: "openai",
+          operation: "action_prioritization",
+          attempt,
+          durationMs: Math.max(0, now() - startedAt),
+          outcome: "failure",
+          statusClass: httpStatusClass(statusFromError(error)),
+          providerErrorCode,
+          retryDecision: "deadline_exceeded",
+        });
         throw new MandatorySynthesisError(
           "synthesis_unavailable",
           "OpenAI could not complete mandatory synthesis before the scan deadline. Try again.",
@@ -368,9 +468,10 @@ export async function synthesizeFounderActions(
 
 async function requestOpenAiProposal(
   payload: ModelPayload,
+  apiKey: string,
   signal?: AbortSignal,
 ): Promise<ModelProposalResponse> {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey });
   const response = await client.responses.parse(
     {
       model: "gpt-5.6",
