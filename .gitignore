@@ -9,6 +9,7 @@ out/
 
 # Test output
 coverage/
+.coverage/
 playwright-report/
 test-results/
 

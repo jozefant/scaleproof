@@ -6,7 +6,7 @@ import {
   type APIRequestContext,
   type Page,
   type TestInfo,
-} from "@playwright/test";
+} from "./coverage-fixtures";
 
 const context = {
   stage: "unknown",
