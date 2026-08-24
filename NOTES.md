@@ -47,7 +47,7 @@ Below-gate path proven: `--threshold 99` exits 1.
 | --- | --- |
 | 1. `test:e2e:coverage` >= 60.0% | **64.8% pass** (re-prove at the end) |
 | 2. `npm run verify` green | baseline green; re-prove after last change |
-| 3. 7 tasks checked in TASKS.md | UI.1 done (1/7) |
+| 3. 7 tasks checked in TASKS.md | UI.1, P0.6 done (2/7) |
 | 4. `docs/node24-upgrade-plan.md` | written, plan-only |
 | 5. `npm pack --dry-run` in `cli/` | not started |
 | 6. one commit per task, clean tree | not started |
@@ -74,7 +74,24 @@ Below-gate path proven: `--threshold 99` exits 1.
 
 ## Failed approaches
 
-(none yet)
+- Handing turbopack's indexed source maps straight to monocart. It throws
+  `TypeError: Cannot destructure property 'length' of 'n'` in
+  `decodeSourceMappings`. Flatten first.
+- Running the coverage web server as `next dev`. Playwright terminates it with
+  SIGTERM, which skips V8's exit-time profile write, so the server profile came
+  back empty. Fixed by running Next programmatically in process.
+- Asserting the load-time heading clearance with `window.scrollTo(0, 0)`. The
+  page sets `scroll-behavior: smooth`, so the measurement happened mid-animation
+  and read -473.5px. Needs `behavior: "instant"`.
+- Trusting monocart's line totals unchecked. See confirmed finding 2.
+
+## Round 2 — UI.1 and P0.6
+
+- UI.1 committed `0520f15`, critic PASS (verdicts below). Critic's kicker
+  finding filed as new task **UI.2**.
+- P0.6: added `e2e/growth-target-priority.spec.ts` at the real HTTP route seam.
+  Validation commands from TASKS.md: focused Vitest 2 files / 15 tests pass;
+  `npm run test:e2e` 13 passed. Critic running.
 
 ## Open hypotheses
 
@@ -98,7 +115,30 @@ Independent critic subagent, own measurements (throwaway spec, deleted after).
 | Saved desktop/mobile artifacts show no clipped title, overflow, or control regression | MET | Critic opened four PNGs; titles intact, controls correct, overflow assertion byte-identical in the diff. |
 | Presentation-only, no heuristic/scoring/privacy change | MET | diff is 3 files; no scanner, scoring, contract, or security file touched. |
 
+### P0.6 — **PASS** (mutation-verified)
+
+| Acceptance clause | Verdict | Evidence the critic observed itself |
+| --- | --- | --- |
+| API-route or Playwright test changing only question C | MET | one helper POSTs `/api/analyze` with `stage`/`dataSensitivity` fixed; real HTTP seam, no direct call to `selectDeterministicActions`. |
+| Proves founder-visible action order/selection changes | MET | **Mutation test**: neutered `groupPriority` to `return 0` -> 2 of 3 tests failed; restored -> 13 passed. |
+| Score, verdict, confidence, checks, growth unchanged | MET | all five asserted, and re-asserted against a baseline for all six enum values. Contract confirms none are vacuous. |
+| Critical remediation ahead of every target preference | MET | asserted for the full literal enum, all six values, plus `length <= 3`. |
+| `unknown` and `withheld` neutral | MET | both asserted, and neutrality shown distinct from a real preference. |
+| Determinism, no live provider | MET | blanked key + `PLAYWRIGHT_TEST=1` -> `testMandatorySynthesis`; demo source is a local directory scan. |
+| No heuristic change (test-only task) | MET | `git diff main..HEAD -- SCORING.md src/lib/analysis/constants.ts` empty; version still `0.8.6-hackathon`. |
+
 Critic concerns and what was done:
+
+- Neutrality proven against one preference only -> filed as **P0.11**, task not
+  reopened (AGENTS.md review protocol point 4).
+- `reuseExistingServer: !process.env.CI` could reuse a real-key dev server ->
+  same task **P0.11**. Pre-existing, outside P0.6's scope.
+- Local `Report` type said `confidence: string` -> **fixed** to `number`.
+- API-only specs pay for an unused Chromium page via the auto coverage fixture.
+  Accepted deliberately: using the raw `test` would drop them from the coverage
+  gate.
+
+### UI.1 critic concerns and what was done:
 
 1. Section **kickers** (`.repository-label`, `.section-kicker`) still clip on
    the header boundary. Same defect class, different elements -> filed as a new

@@ -9,7 +9,7 @@ architecture review and resolved reviewer comments that previously lived here.
 
 ## Open work
 
-### [ ] P0.6 Prove growth-target prioritization in the founder-visible flow
+### [done] P0.6 Prove growth-target prioritization in the founder-visible flow
 
 The deterministic policy is implemented and documented in
 [`SCORING.md`](./SCORING.md#growth-target-action-priority): `growthTarget`
@@ -29,6 +29,31 @@ npm test -- src/lib/analysis/actions.test.ts src/lib/analysis/analyze.test.ts
 npm run test:e2e
 npm run verify
 ```
+
+### [ ] P0.11 Close two test-determinism gaps found while accepting P0.6
+
+Both were raised by the P0.6 reviewer as non-blocking and are recorded here
+rather than reopening the accepted task.
+
+1. Growth-target neutrality is proven against one preference only. A bug where
+   `unknown`/`withheld` silently inherited a specific target's preference list
+   would still pass, because the current assertion only shows they differ from
+   `engineering_team` and match each other.
+2. `playwright.config.ts` sets `reuseExistingServer: !process.env.CI`. Locally,
+   an already-running `next dev` on port 3100 without `PLAYWRIGHT_TEST=1` and
+   with a real ambient `OPENAI_API_KEY` would be reused, and the browser suite
+   would reach the live provider. The failure mode is a red test rather than
+   silent billing, but it is the one hole in the blanked-key guarantee.
+   `playwright.coverage.config.ts` already sets `reuseExistingServer: false`.
+
+Acceptance:
+
+- Neutral growth targets are proven neutral against an explicit no-preference
+  baseline, not against a single non-neutral target.
+- The browser suite cannot reach a live provider through a reused server: either
+  the reuse is dropped, or the suite asserts the server it connected to is the
+  blanked-key test server before running any analysis request.
+- `npm run test:e2e` and `npm run verify` pass.
 
 ### [ ] P0.9 Harden external-provider evidence and prevent security false positives
 
