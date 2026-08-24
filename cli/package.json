@@ -1,0 +1,24 @@
+{
+  "name": "scaleproof",
+  "version": "0.1.0",
+  "description": "Evidence-based scale readiness for one public GitHub repository.",
+  "license": "MIT",
+  "author": "Jozef Antony",
+  "keywords": [
+    "code-review",
+    "readiness",
+    "static-analysis"
+  ],
+  "bin": {
+    "scaleproof": "bin/scaleproof.mjs"
+  },
+  "files": [
+    "bin/scaleproof.mjs",
+    "dist/scaleproof.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.11.0"
+  }
+}

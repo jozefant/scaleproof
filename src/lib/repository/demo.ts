@@ -2,9 +2,22 @@ import path from "node:path";
 
 import { scanDirectory } from "./scanner";
 
-export async function acquireDemoRepository() {
+/** Default location of the synthetic fixture inside a Scaleproof checkout. */
+export function defaultDemoFixtureRoot(): string {
+  return path.join(process.cwd(), "fixtures", "scaleproof-demo");
+}
+
+/**
+ * Scan the synthetic demo repository.
+ *
+ * `root` exists so a caller that materializes the same fixture elsewhere (the
+ * CLI unpacks its embedded copy into a temporary directory) reuses this exact
+ * scan path. The repository label, source URL, and synthetic history are
+ * identical for every root, so the produced report does not depend on it.
+ */
+export async function acquireDemoRepository(root: string = defaultDemoFixtureRoot()) {
   const snapshot = await scanDirectory({
-    root: path.join(process.cwd(), "fixtures", "scaleproof-demo"),
+    root,
     repositoryLabel: "scaleproof/demo-startup",
     sourceUrl: null,
   });

@@ -31,10 +31,13 @@ does not retain scan history.
 | `src/lib/application` | Deterministic orchestration, raw-content release, mandatory synthesis, and report assembly | Repository, analysis, AI, and report contract |
 | `src/lib/report` | Versioned Zod contract, shared labels, and pure Markdown rendering | Public analysis and repository result types |
 | `src/app/api` | Request validation, status mapping, no-store response boundary | Application orchestrator only |
+| `src/cli` | Argument parsing, exit codes, stdout report and stderr progress separation, SIGINT cancellation | Repository, application, and report modules only; never the HTTP route, Next.js, or React |
 | `src/components` | Intake, founder report sections, colocated CSS modules, chart, evidence dossier, and download handoff | Public report contract only |
 
 The dependency direction keeps repository acquisition and UI replaceable without
-changing the scoring model.
+changing the scoring model. `src/cli` and `src/app/api` are sibling transport
+adapters over the same orchestrator, so a terminal run and an HTTP request
+produce the same schema-valid report from steps 2 to 11 below.
 
 ## Request sequence
 

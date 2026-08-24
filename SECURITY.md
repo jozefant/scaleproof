@@ -30,7 +30,12 @@ data; Scaleproof minimizes handling but cannot make that publication safe.
 - OpenAI input uses an explicit allowlist, structured output, a conservative token budget, and `store: false`.
 - API responses use `Cache-Control: no-store`.
 - Global responses set anti-framing, MIME-sniffing, referrer, opener, and browser-permission headers.
-- Credentials are read from process environment variables and never logged.
+- Credentials are read from process environment variables and never logged. The
+  CLI accepts no credential flag and requires `OPENAI_API_KEY` in the
+  environment.
+- The CLI keeps the report on stdout unless an `--output` path is requested
+  explicitly, and writes nothing after an acquisition or synthesis failure.
+  Its stderr carries progress and allowlisted diagnostic events only.
 - The SaaS 10x audit lens uses bounded static inspection only. Its evidence
   dossier returns paths and summaries, never source snippets, and it does not
   execute scanned code, install dependencies, or call external scanners.

@@ -313,7 +313,7 @@ Acceptance:
 - No claim says the heuristic is externally calibrated before this work is
   complete.
 
-### [ ] P2.3 Package Scaleproof as a public-repository CLI
+### [done] P2.3 Package Scaleproof as a public-repository CLI
 
 Make the existing public GitHub scan pipeline available as an installable Node
 22 command without changing the web app or widening its trust boundary. The
