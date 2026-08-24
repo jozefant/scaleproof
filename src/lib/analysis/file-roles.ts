@@ -1,4 +1,5 @@
 import * as signals from "./signals";
+import { isServerSurfaceFile } from "./static-frontend";
 import type { EvidenceReference } from "./types";
 
 /**
@@ -304,6 +305,79 @@ export function productionExecutionFiles(
   index: signals.RepositoryIndex,
 ): IndexedFile[] {
   return index.files.filter((file) => isProductionExecutionFile(index, file));
+}
+
+/* ---------------------------------------------------------------------- */
+/* Server execution scope                                                   */
+/* ---------------------------------------------------------------------- */
+
+const DEPENDENCY_MANIFEST =
+  /(^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|composer\.(?:json|lock)|pom\.xml|build\.gradle(?:\.kts)?|requirements\.txt|pyproject\.toml|cargo\.toml|go\.mod|deno\.jsonc?|gemfile)$/i;
+
+const serverExecutionCache = new WeakMap<
+  signals.RepositoryIndex,
+  ReadonlySet<string>
+>();
+
+/**
+ * The reachable production call graph of the server.
+ *
+ * "Does this file run on the server" is a call-graph question, not a filename
+ * question. A permission check lives in `src/lib/authz.ts` or
+ * `src/middleware/auth.ts` at least as often as it lives inside the route file,
+ * and neither of those paths looks like a server surface on its own. Reading
+ * only the surface-shaped files silently dropped genuine enforcement.
+ *
+ * The graph is rooted at every production file that *is* a server surface - a
+ * route, an API handler, a serverless function, an Express or framework entry,
+ * a JVM or Python module - and then follows their static imports. Browser-only
+ * code stays outside it: a module a server root never imports is not server
+ * execution, however production-like it looks, so a role branch or a form schema
+ * that only the browser evaluates still cannot earn server-side credit.
+ */
+function serverExecutionPaths(
+  index: signals.RepositoryIndex,
+): ReadonlySet<string> {
+  const cached = serverExecutionCache.get(index);
+  if (cached) return cached;
+
+  const production = productionExecutionFiles(index);
+  const roots = production.filter(
+    (file) =>
+      // A manifest declaring `express` is how the static-frontend profile knows
+      // a server exists; it is not code the server runs, and a package name is
+      // never enforcement evidence.
+      !DEPENDENCY_MANIFEST.test(file.normalizedPath) &&
+      isServerSurfaceFile(file.normalizedPath, file.content),
+  );
+  const closure = signals.importClosure(
+    index,
+    roots.map((file) => file.normalizedPath),
+  );
+  serverExecutionCache.set(index, closure);
+  return closure;
+}
+
+/**
+ * True when a file is part of the reachable production call graph of the
+ * server. This is the scope in which a server-side control - authorization,
+ * input validation - may read enforcement evidence.
+ */
+export function isServerExecutionFile(
+  index: signals.RepositoryIndex,
+  file: IndexedFile,
+): boolean {
+  return (
+    isProductionExecutionFile(index, file) &&
+    serverExecutionPaths(index).has(file.normalizedPath)
+  );
+}
+
+/** Every reachable production file that the server can execute. */
+export function serverExecutionFiles(
+  index: signals.RepositoryIndex,
+): IndexedFile[] {
+  return index.files.filter((file) => isServerExecutionFile(index, file));
 }
 
 /**

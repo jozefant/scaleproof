@@ -4,6 +4,7 @@ import {
   hasRealDataQuery,
   hasUnboundedDataQuery,
 } from "../browser-data-boundary";
+import { providerSurface } from "../external-provider";
 import { isProductionExecutionFile } from "../file-roles";
 import { isStaticFrontendOnly } from "../static-frontend";
 import type { ControlEvaluator } from "./shared";
@@ -464,6 +465,40 @@ function axiosInstanceObservations(
   return instances;
 }
 
+/**
+ * Recognized external-provider calls inside Supabase Edge Functions.
+ *
+ * These are request-path external calls that the generic client patterns miss:
+ * a provider SDK imported with `npm:` never writes `fetch(`. Without them, a
+ * function that calls a paid provider with no timeout, no input bound, and no
+ * abuse guard would be classified as *not applicable* rather than assessed.
+ */
+function edgeProviderEvidence(index: Parameters<ControlEvaluator>[0]) {
+  return providerSurface(index)
+    .edgeFunctions.filter((boundary) => boundary.providerCall)
+    .flatMap((boundary) => boundary.providerEvidence);
+}
+
+function edgeProviderObservations(
+  index: Parameters<ControlEvaluator>[0],
+): ClientObservation[] {
+  const byPath = new Map(index.files.map((file) => [file.normalizedPath, file]));
+  return providerSurface(index)
+    .edgeFunctions.filter((boundary) => boundary.providerCall)
+    .flatMap((boundary) =>
+      boundary.providerEvidence.flatMap((evidence) => {
+        const file = byPath.get(evidence.path.toLowerCase());
+        return file
+          ? [{
+              file,
+              timeoutConfigured: boundary.timeoutBounded,
+              safetyConfigured: boundary.retrySafe || boundary.abuseGuarded,
+            }]
+          : [];
+      }),
+    );
+}
+
 function clientReferences(clients: ClientObservation[]) {
   const uniqueFiles = [...new Map(
     clients.map((client) => [client.file.normalizedPath, client.file]),
@@ -629,7 +664,13 @@ export function saasAuditControls(): ControlEvaluator[] {
       });
     },
     (index) => {
-      const requestClient = requestContentMatching(index, hasExternalClientCall);
+      // A Supabase Edge Function *is* the request path. A recognized provider
+      // call inside one is synchronous external work while the caller waits, so
+      // it belongs to this control exactly like a `fetch` in an API route.
+      const requestClient = signals.mergeEvidence(
+        requestContentMatching(index, hasExternalClientCall),
+        edgeProviderEvidence(index),
+      );
       const asyncPath = sourceContent(index, [
         /\b(bullmq|bull\.queue|sidekiq|celery|rabbitmq|kafka|sqs|@async|quartz|scheduler|job queue|worker)\b/i,
       ]);
@@ -665,18 +706,27 @@ export function saasAuditControls(): ControlEvaluator[] {
       const clientFiles = sourceFiles(index).filter((file) =>
         hasExternalClientCall(file.content),
       );
+      const edgeObservations = edgeProviderObservations(index);
+      const edgePaths = new Set(
+        edgeObservations.map((observation) => observation.file.normalizedPath),
+      );
       const clientObservations = [
-        ...clientFiles.map((file) => {
-          const kinds = clientKinds(file.content);
-          return {
-            file,
-            timeoutConfigured:
-              TIMEOUT_PATTERNS.some((pattern) => pattern.test(file.content)) ||
-              kinds.some((kind) => globalDefaults.has(kind)),
-            safetyConfigured: RETRY_SAFETY_PATTERNS.some((pattern) => pattern.test(file.content)),
-          };
-        }),
-        ...sourceFiles(index).flatMap((file) => axiosInstanceObservations(file, globalDefaults)),
+        ...edgeObservations,
+        ...clientFiles
+          .filter((file) => !edgePaths.has(file.normalizedPath))
+          .map((file) => {
+            const kinds = clientKinds(file.content);
+            return {
+              file,
+              timeoutConfigured:
+                TIMEOUT_PATTERNS.some((pattern) => pattern.test(file.content)) ||
+                kinds.some((kind) => globalDefaults.has(kind)),
+              safetyConfigured: RETRY_SAFETY_PATTERNS.some((pattern) => pattern.test(file.content)),
+            };
+          }),
+        ...sourceFiles(index)
+          .filter((file) => !edgePaths.has(file.normalizedPath))
+          .flatMap((file) => axiosInstanceObservations(file, globalDefaults)),
       ];
       const unboundedClients = clientObservations.filter((client) =>
         !client.timeoutConfigured,

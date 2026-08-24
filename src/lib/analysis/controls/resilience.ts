@@ -1,3 +1,4 @@
+import { providerSurface } from "../external-provider";
 import * as signals from "../signals";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
@@ -34,6 +35,24 @@ export const resilienceDetectorMetadata = helpers.defineDetectorMetadata([
     strongestEvidenceTier: "enforced",
     confidenceLimitation:
       "Repository evidence cannot prove complete data inventory or production execution.",
+    remediationCode: "define-retention",
+  },
+  {
+    id: "res.generated-object-lifecycle",
+    claim:
+      "Objects the application generates into publicly readable provider storage have retention, deletion, or expiration evidence in this repository.",
+    applicability:
+      "Repositories that both create objects in provider storage and expose them without a credential.",
+    requiredSignals: [
+      "Retention, deletion, expiration, signed-URL expiry, or scheduled cleanup evidence in reachable server code, versioned SQL, or deployment configuration",
+    ],
+    disqualifyingSignals: [
+      "A documented claim that the deployed bucket lifecycle rule handles it, which is reported as runtime-only",
+      "Generic privacy prose with no lifecycle path for the generated objects",
+    ],
+    strongestEvidenceTier: "enforced",
+    confidenceLimitation:
+      "A repository cannot show deployed storage policy, bucket lifecycle configuration, or what already exists in the bucket. Absence of this evidence is a repository evidence gap, not proof that the objects are retained forever.",
     remediationCode: "define-retention",
   },
   {
@@ -84,6 +103,36 @@ export const resilienceDetectorMetadata = helpers.defineDetectorMetadata([
 
 export function resilienceControls(): ControlEvaluator[] {
   return [
+    (index) => {
+      // A generated object that anybody can read is a data-lifecycle question,
+      // not a storage-policy assertion: the repository can show whether a
+      // deletion, expiry, or cleanup path exists, and cannot show what the
+      // deployed bucket does.
+      const surface = providerSurface(index);
+      return helpers.repositoryEvidenceControl({
+        id: "res.generated-object-lifecycle",
+        domain: "resilience",
+        title: "Public generated-object lifecycle",
+        remediationCode: "define-retention",
+        severity: "high",
+        weight: 3,
+        applicable: surface.publicObject,
+        notApplicableSummary:
+          "No application-created provider object with credential-free public exposure was found, so there is no public generated-object lifecycle to assess.",
+        verified:
+          surface.lifecycle.verified.length > 0
+            ? signals.mergeEvidence(surface.lifecycle.verified, surface.publicObjectEvidence)
+            : [],
+        runtimeClaim: surface.lifecycle.runtimeClaim,
+        missingEvidence: surface.publicObjectEvidence,
+        passSummary:
+          "Publicly readable generated objects have retention, deletion, or expiration evidence in this repository.",
+        runtimeClaimSummary:
+          "The repository documents a retention or lifecycle rule held by the deployed storage provider. Deployed bucket lifecycle state cannot be verified from a repository, so it earns no enforcement credit and is not reported as a failure.",
+        missingSummary:
+          "The application writes objects into storage that are exposed without a credential, and this repository shows no retention, deletion, expiration, or scheduled-cleanup path for them. Deployed storage policy and bucket lifecycle configuration are outside repository evidence.",
+      });
+    },
     (index, context) => {
       const backupAutomation = signals.findContent(
         index,

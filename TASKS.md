@@ -55,7 +55,7 @@ Acceptance:
   blanked-key test server before running any analysis request.
 - `npm run test:e2e` and `npm run verify` pass.
 
-### [ ] P0.9 Harden external-provider evidence and prevent security false positives
+### [done] P0.9 Harden external-provider evidence and prevent security false positives
 
 A public-corpus comparison exposed a material blind spot: a Supabase Edge
 Function can invoke an external AI or media provider while visibly disabling

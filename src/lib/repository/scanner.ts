@@ -242,6 +242,51 @@ function detectStacks(files: RepositoryFile[]): string[] {
   ) {
     stacks.add("Python");
   }
+
+  // Platform and framework signals. The base language alone does not tell a
+  // founder whether the repository is a React browser bundle, an edge-runtime
+  // function, or a paid-provider integration, and those three shapes have very
+  // different readiness questions.
+  //
+  // Provider detection here is deliberately shape-based - a Deno remote module
+  // import or a client constructed from an environment credential - and it is a
+  // diagnostic label only. The security boundary that acts on provider calls
+  // lives in the analysis layer, which this module must not depend on.
+  const hasPath = (pattern: RegExp): boolean =>
+    [...paths].some((filePath) => pattern.test(filePath));
+  const hasContent = (pattern: RegExp): boolean =>
+    files.some((file) => pattern.test(file.content));
+
+  if (
+    hasContent(/"react(?:-dom)?"\s*:/) ||
+    hasContent(/\bfrom\s+["']react["']/) ||
+    hasPath(/\.[jt]sx$/)
+  ) {
+    stacks.add("React");
+  }
+  if (hasPath(/(^|\/)vite\.config\.[cm]?[jt]s$/) || hasContent(/"vite"\s*:/)) {
+    stacks.add("Vite");
+  }
+  if (hasPath(/^supabase\/functions\/[^/]+\/index\.[cm]?[jt]s$/)) {
+    stacks.add("Supabase Edge Functions");
+  }
+  if (
+    hasPath(/(^|\/)deno\.jsonc?$/) ||
+    hasPath(/(^|\/)import_map\.json$/) ||
+    hasContent(/\bDeno\.(?:serve|env|readFile|writeFile)\s*\(/) ||
+    hasContent(/\bfrom\s+["'](?:npm|jsr):/)
+  ) {
+    stacks.add("Deno");
+  }
+  if (
+    hasContent(/\bfrom\s+["'](?:npm:|jsr:|https:\/\/esm\.sh\/)(?!@?supabase|@std\/|std[@/])/) ||
+    hasContent(
+      /\b(?:new\s+[A-Z][\w$]*|create[A-Z][\w$]*)\s*\([^)]{0,240}\b(?:api[_-]?key|apikey)\b[^)]{0,120}(?:Deno\.env\.get|process\.env)/i,
+    )
+  ) {
+    stacks.add("External provider SDK");
+  }
+
   if (stacks.size === 0) {
     stacks.add("Generic repository");
   }

@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.9-hackathon`
+Version: `0.8.10-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -194,6 +194,143 @@ modules. When the control passes, machine-readable contracts, per-module CI
 definitions, and documented module boundaries are merged into its evidence. The
 result stays a layout signal at evidence tier `inferred`; it is never proof of
 low coupling or independent deployability.
+
+## External-provider exposure
+
+A serverless edge handler that calls a paid external provider is the shape that
+turns an open endpoint into somebody else's invoice. Recognizing that call by
+vendor name would only recognize the vendors somebody thought of, so the
+detector recognizes the **shape** of the call.
+
+### Provider-call signals
+
+| Signal | Observed |
+| --- | --- |
+| `runtime_package_import` | A Deno `npm:`, `jsr:`, or CDN module import in a file that also reads a credential which is not the platform's own |
+| `outbound_http_request` | A `fetch`/`axios`/`ky`/`got` call to an absolute external URL or an environment-configured endpoint |
+| `credentialed_client` | A client constructed with an API key, access token, or client secret read from the environment |
+| `credentialed_request_header` | An outbound request carrying an `authorization` or API-key header built from the environment |
+
+Comments are removed before matching, so a commented-out client is not a call.
+Two narrowings apply, and both are narrowings of the shape rather than a vendor
+allowlist: the platform's own data client (`@supabase/supabase-js` against
+`SUPABASE_URL` and its keys) and the project's own platform endpoint are the
+project's database handle, assessed by the browser-to-BaaS data boundary; and a
+remote module import on its own is a utility import, not a provider call, until
+the same file also reads a non-platform credential.
+
+### `security.edge-function-boundary`
+
+Each Supabase Edge Function is still evaluated against its own code and its own
+`[functions.<name>]` configuration section. Two things changed:
+
+- The function's evidence now includes sibling modules in its directory and the
+  `_shared` modules it references. A wildcard CORS header defined in
+  `_shared/cors.ts` belongs to the boundary of every function that imports it,
+  and to no other function.
+- A provider call is any of the four signals above rather than a match against a
+  fixed provider-name list.
+
+| Observation | Outcome | Evidence tier | Severity | Action |
+| --- | --- | --- | --- | --- |
+| Reachable provider call with `verify_jwt = false`, wildcard CORS, or request/response logging | `fail` | `enforced` | `critical` | `harden-auth-boundary`, mandatory |
+| Provider call with verified JWT or a token check, restricted CORS, bounded input, and a timeout | `pass` | `enforced` | `critical` | None |
+| Edge Functions without that complete boundary | `unknown` | `absent` | `critical` | `harden-auth-boundary` |
+| No Supabase Edge Function | `not_applicable` | `absent` | `critical` | None |
+
+Each disabling condition is sufficient on its own. Evidence remains the function
+file, the modules where a provider signal was observed, and `supabase/config.toml`;
+no source text, credential name, endpoint, or module specifier is reported.
+
+Because a critical concrete failure is mandatory, `harden-auth-boundary` is
+selected ahead of every growth-target preference for this finding.
+
+### Server-side enforcement
+
+`security.authorization` and `security.validation` both require an operation
+inside the **reachable production call graph of the server**. That graph is
+rooted at every production file which is itself a server surface — a route, an
+API handler, a serverless function, a framework or Express entry, a JVM or
+Python module — and then follows their static imports, with the same alias
+resolution used elsewhere. A dependency manifest is never a root: declaring
+`express` is how the static-frontend profile learns a server exists, not code the
+server runs.
+
+Scope is a call-graph question, not a filename question. A permission check lives
+in `src/lib/authz.ts` or `src/middleware/auth.ts` at least as often as in the
+route file, and both are enforcement when a server root imports them. Browser
+code stays excluded by construction: a module no server root reaches is not
+server execution, so a role branch or a form schema that only the browser
+evaluates cannot earn server-side credit. Comments are removed before matching.
+
+| Control | Passes on | Never passes on |
+| --- | --- | --- |
+| `security.authorization` | A framework annotation or filter chain (`@PreAuthorize`, `authorizeHttpRequests`, `SecurityFilterChain`), an explicit role/permission decision (`hasRole(`, `requirePermission(`, `ability.can(`, `enforcer.enforce(`), or a verified identity used as a decision input (`session.user.role`, `claims.permissions`, `roles.includes(`) — `enforced`. A versioned policy whose predicate references the caller (`create policy … auth.uid()`, `allow read: if request.auth …`) — `inferred` | An `Authorization` request header, a comment, a log line, an authorization package in a manifest, browser-only role display, or a policy with no identity predicate |
+| `security.validation` | A parse call applied to a request-derived value (`s.parse(req.body)`, `Item.parse(await request.json())`) whatever the schema variable is named, or a recognized validation API: `safeParse(`, `parseAsync(`, `validateOrReject(`, `@Valid`, `ValidationPipe`, `validationResult(`, a Pydantic model | A validation package in a manifest, a browser form resolver, a comment, a schema module that no reachable handler parses, or a standard parser that shares the method name (`JSON.parse`, `Date.parse`, `path.parse`, `yaml.parse`) |
+
+The receiver's *name* is not part of the validation rule: requiring a
+schema-shaped identifier would make the control depend on spelling rather than on
+whether the request is actually parsed.
+
+The bare word `authorization` is deliberately absent from the authorization
+patterns: `headers: { Authorization: … }` is how a request carries a token, not
+how a server decides who may act.
+
+### Request-path applicability for Edge Functions
+
+A Supabase Edge Function *is* the request path, so a recognized provider call
+inside one is request-path external work:
+
+- `saas.slow-work` treats it as synchronous external work and fails when no
+  queue, worker, scheduler, or other background-work boundary is visible.
+- `saas.failure-safety` observes it as an external client, taking its timeout
+  evidence from the function's own files and its retry-safety evidence from
+  idempotency, backoff, circuit-breaker, or abuse-guard signals in the same
+  function.
+
+Missing timeout, input-limit, or abuse evidence for a recognized provider call is
+therefore never reported as `not applicable`.
+
+### Provider abuse, bounds, and public generated objects
+
+Three controls ask a repository-evidence question with three separable answers.
+`not_applicable` remains available when the repository shows no provider call or
+no publicly readable generated object at all.
+
+| State | Outcome | Evidence tier | Meaning |
+| --- | --- | --- | --- |
+| Repository evidence | `pass` | `enforced` | The guard, bound, or lifecycle path is defined in reachable server code, versioned SQL, or deployment configuration |
+| Runtime-only claim | `unknown` | `runtime_only` | Documentation states that the deployed provider, platform, or dashboard holds it; a repository cannot verify deployed state, so it earns no enforcement credit |
+| Missing evidence | `unknown` | `absent` | Neither is present. This is an evidence gap, not proof that no limit, policy, or lifecycle rule exists |
+
+| Control | Domain | Severity | Weight | Required repository evidence | Remediation |
+| --- | --- | --- | --- | --- | --- |
+| `security.provider-abuse-guard` | Security | high | 3 | A server-side rate limit, throttle, quota, credit, or spend guard | `add-failure-controls` |
+| `security.provider-io-bounds` | Security | medium | 2 | Both a bounded request input and a bounded requested provider output | `add-failure-controls` |
+| `res.generated-object-lifecycle` | Data resilience | high | 3 | Retention, deletion, expiration, signed-URL expiry, or a scheduled cleanup for objects the application creates and exposes without a credential | `define-retention` |
+
+Guard evidence is never read from a dependency manifest: declaring a rate-limiting
+package is not rate limiting, exactly as a validation package is not validation.
+Deployed storage policy, deployed rate-limit state, and provider billing state
+stay outside repository evidence, and no summary asserts them.
+
+### Stack and reachability diagnostics
+
+Detected stacks now name the platform shape beside the base language: `React`,
+`Vite`, `Supabase Edge Functions`, `Deno`, and `External provider SDK`. The
+provider label is shape-derived and diagnostic only; the security boundary that
+acts on provider calls lives in the analysis layer.
+
+Alias resolution reads both `tsconfig.json`/`jsconfig.json` `compilerOptions.paths`
+and a bundler `resolve.alias` object in `vite.config.*`, `rollup.config.*`, or
+`webpack.config.*`, so a React/Vite application whose alias lives outside the
+TypeScript configuration is no longer treated as unreachable source.
+Configuration that is JSON with comments or trailing commas is parsed rather than
+silently discarded.
+
+Unresolved local import specifiers are recorded as internal diagnostics for
+tests. They still mark reachability as incomplete, and the specifier itself never
+appears in a check result, the public report, or a model payload.
 
 ## Static-frontend evidence profile
 
@@ -393,8 +530,8 @@ score or a fourth intake question.
 | --- | --- | --- | --- |
 | Stateless tier | `saas.stateless-tier` | Reliability / High | Session, user, tenant, or job state in memory; request-path stateful local writes only. |
 | Database discipline | `saas.database-discipline` | Reliability / High | Unbounded queries, explicit N+1 loop patterns, bounded requests, migrations, query-predicate/index overlap, and read/write-replica readiness where configured. Failures are read only from the reachable production call graph. |
-| Slow request work | `saas.slow-work` | Reliability / High | HTTP, mail, and similar work in reachable production request handlers; queue, worker, scheduler, or asynchronous boundary evidence. |
-| Failure safety | `saas.failure-safety` | Reliability / Critical | Timeout and retry/backoff/idempotency evidence at the same call site or from an explicit library-wide default, in reachable production source; payment and webhook handlers require local idempotency evidence. |
+| Slow request work | `saas.slow-work` | Reliability / High | HTTP, mail, and similar work in reachable production request handlers, including recognized external-provider calls inside Supabase Edge Functions; queue, worker, scheduler, or asynchronous boundary evidence. |
+| Failure safety | `saas.failure-safety` | Reliability / Critical | Timeout and retry/backoff/idempotency evidence at the same call site or from an explicit library-wide default, in reachable production source, including recognized external-provider calls inside Supabase Edge Functions; payment and webhook handlers require local idempotency evidence. |
 | Configuration boundary | `saas.config-boundary` | Security / Medium | Values used as runtime configuration, client or service initialization, credentials, deployment endpoints, or capacity settings in production source; environment-owned configuration and pool settings in source or deployment configuration. |
 | Tenant isolation | `saas.tenant-isolation` | Security / Critical | Tenant-owned data, central RLS/filter/repository boundaries, and direct tenant queries without a visible predicate or central boundary. |
 | Observability | `saas.observability` | Operations / High | Metrics/tracing plus correlation propagation or independently detected structured logging. |
@@ -437,7 +574,9 @@ each map one-to-one to the remaining catalog rules.
   UI component name, and generated component-library text are not queries.
 - Database, slow-work, and failure-safety findings apply the request-path scope
   defined in *Execution-context file roles*. A database service call on a
-  persistence handle is never read as an external dependency.
+  persistence handle is never read as an external dependency. A Supabase Edge
+  Function is production execution, and a recognized provider call inside one is
+  request-path external work; see *External-provider exposure*.
 - The configuration boundary fails only when a value is used as runtime
   configuration, client or service initialization, a credential, a deployment
   endpoint, or a capacity setting: a connection string, a credential-shaped

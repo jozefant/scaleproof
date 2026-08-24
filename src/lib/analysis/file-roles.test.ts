@@ -190,6 +190,15 @@ const NEGATIVE_FORMS: Array<[string, string]> = [
   ["src/specification.ts", "export const specification = 1;"],
   ["src/toolbar.tsx", "export const Toolbar = () => null;"],
   ["src/components/ui/button.tsx", "export const Button = () => null;"],
+  // A serverless edge handler is deployed application code, not tooling. The
+  // `supabase/functions/` directory sits beside `supabase/migrations/`, which is
+  // tooling, so the two are pinned together here.
+  [
+    "supabase/functions/voice-note/index.ts",
+    "Deno.serve(async () => new Response('ok'));",
+  ],
+  ["supabase/functions/_shared/cors.ts", "export const corsHeaders = {};"],
+  ["supabase/config.toml", "[functions.voice-note]\nverify_jwt = true"],
 ];
 
 describe("execution-context file roles", () => {
@@ -236,6 +245,29 @@ describe("execution-context file roles", () => {
     expect(classifyFileRole("./src/Orders.TEST.ts")).toBe("test");
     expect(classifyFileRole("src\\__tests__\\orders.ts")).toBe("test");
     expect(classifyFileRole("./README.md")).toBe("documentation");
+  });
+});
+
+describe("Supabase Edge Functions are production execution", () => {
+  it("keeps an edge handler and its shared module in the production call graph", () => {
+    const index = createRepositoryIndex(
+      snapshot([
+        {
+          path: "supabase/functions/voice-note/index.ts",
+          content:
+            "import { corsHeaders } from '../_shared/cors.ts';\nDeno.serve(async () => new Response('ok', { headers: corsHeaders }));",
+        },
+        { path: "supabase/functions/_shared/cors.ts", content: "export const corsHeaders = {};" },
+        { path: "supabase/migrations/20240101_init.sql", content: "create table notes (id uuid);" },
+      ]),
+    );
+
+    expect(productionExecutionFiles(index).map((file) => file.path).sort()).toEqual([
+      "supabase/functions/_shared/cors.ts",
+      "supabase/functions/voice-note/index.ts",
+    ]);
+    // The migration beside it stays offline tooling.
+    expect(classifyFileRole("supabase/migrations/20240101_init.sql")).toBe("tooling");
   });
 });
 
