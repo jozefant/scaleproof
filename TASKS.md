@@ -205,7 +205,7 @@ Acceptance:
 - Update heuristic version, [`SCORING.md`](./SCORING.md), focused tests, and
   `npm run verify` in the same implementation change.
 
-### [ ] P1.1 Assess direct browser-to-BaaS data boundaries without mistaking client code for enforcement
+### [done] P1.1 Assess direct browser-to-BaaS data boundaries without mistaking client code for enforcement
 
 An authenticated browser application can call a BaaS database directly. Client
 session state and `user_id` predicates improve UX but do not prove server-side
@@ -310,6 +310,28 @@ Acceptance:
 - Golden scenarios are unchanged unless the change is intended and versioned.
 - Heuristic version, [`SCORING.md`](./SCORING.md), and focused tests updated
   together; `npm run verify` passes.
+
+### [ ] P1.3 Correct the tenant-isolation summary for a client-only tenant predicate
+
+Raised while accepting P1.1 and recorded rather than folded in, because
+changing the predicate test would weaken an existing security control.
+
+A browser query such as `.from("orgs").select("*").eq("organization_id",
+org.id)` is now recognized as a real data query, so it can still produce the
+concrete `saas.tenant-isolation` failure whose summary reads "this query has
+neither a tenant predicate nor a central isolation boundary." With a client
+`.eq("organization_id", ...)` visible that sentence is factually wrong, even
+though the P1.1 principle holds: a client predicate is not enforcement.
+
+Acceptance:
+
+- A client-only tenant predicate produces an accurate summary - either
+  corrected wording or a distinct "client-only tenant predicate, not
+  server-side enforcement" state.
+- The finding's severity and the principle that a client predicate never earns
+  authorization credit are unchanged.
+- Golden scenarios unchanged; heuristic version, [`SCORING.md`](./SCORING.md),
+  and focused tests updated together.
 
 ### [ ] P2.2 Complete external heuristic calibration
 

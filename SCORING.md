@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.7-hackathon`
+Version: `0.8.8-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -159,7 +159,8 @@ runtime value; it becomes `not_applicable` only when no such value exists and
 the repository has no deploy-time configuration or connection-pool surface.
 
 Nothing else is relaxed. Credential detection, client-route reachability, edge
-function boundaries, web-security baseline, input validation, quality gates,
+function boundaries, web-security baseline, input validation, the direct
+browser-to-BaaS data boundary, browser personal-data logging, quality gates,
 architecture, agent readiness, and ownership concentration stay fully
 assessable, and `not_applicable` controls are excluded from score and
 confidence exactly as before. Because the reliability and operations domains
@@ -184,6 +185,119 @@ domain, at `medium` severity and weight 3:
 The finding states only that input has no path out of the browser. It makes no
 claim about data handling, authentication, or resilience, and it never implies
 that a backend exists. Its remediation code is `complete-submission-path`.
+
+## Direct browser-to-BaaS data boundary
+
+A browser bundle can call a backend-as-a-service database, storage bucket, or
+authentication API directly. Client session state and a `user_id` predicate
+improve the user experience but run inside the user's own browser, so they are
+never read as server-side authorization. The deployed row-level or storage
+policy that would enforce the boundary frequently lives in the provider
+console, outside the repository.
+
+The boundary is read only from reachable browser source: application source
+that ships to the browser, is not a server surface, and is statically reachable
+from an entry point. Server-side BaaS usage stays with the server-runtime
+controls. The scanner records a categorical boundary only; no source text
+reaches the report or the model payload.
+
+### `security.client-data-boundary`
+
+Security domain, `high` severity, weight 3, remediation `harden-auth-boundary`.
+
+| State | Condition |
+| --- | --- |
+| `not_applicable` | No direct table, document, or storage operation in reachable browser code. A browser authentication client alone is reported as such and raises no policy question. |
+| `pass` (`enforced`) | Versioned policy definitions in this repository cover every accessed resource. |
+| `unknown` (`absent`) | Direct browser data access exists and no versioned policy definition covers the accessed resource. This is missing repository evidence. |
+
+Versioned policy evidence is a repository artifact that defines the enforced
+boundary: a SQL migration or policy file containing `create policy`,
+`alter policy`, or `enable row level security`, or a `firestore.rules`,
+`storage.rules`, or `database.rules.json` file. Coverage is matched by resource
+name: a policy target table, an RLS-enabled table, a `bucket_id` value, or a
+rules `match` path segment must equal the accessed table, collection, or
+bucket. Policy evidence that covers a different resource leaves the gap open.
+
+The missing-evidence state says only that repository evidence is absent. It
+never says the deployed policy is absent or broken, and repository policy
+evidence never proves the deployed project applies it. A client-side identity
+predicate such as `.eq("user_id", user.id)` is reported as a user-experience
+filter and never earns positive authorization credit here or in
+`security.authorization`.
+
+### `security.browser-data-logging`
+
+Security domain, `medium` severity, weight 2, remediation `separate-log-types`.
+
+| State | Condition |
+| --- | --- |
+| `not_applicable` | No browser bundle. Server-side logging stays with `ops.log-redaction`. |
+| `fail` (`enforced`) | A browser log or alert call carries a session, user, email, token, or profile value. |
+| `pass` (`inferred`) | No such call was found. |
+| `unknown` (`runtime_only`) | The scan was partial, so the repository could not be assessed. |
+
+A finding requires a matching value flow. String literals are removed from the
+call's argument expression and template literals are reduced to their
+interpolated expressions before identifiers are read, so
+`console.error("Failed to load the user profile", error)` is generic error
+logging and not personal-data leakage, while `console.log("session", data.session)`
+and an interpolated `${session.user.email}` are findings. Cardinality accesses
+such as `items.length` and PascalCase component, type, and class names are
+excluded.
+
+### Real data queries versus DOM and UI `select`
+
+Query-bound and data-lifecycle checks apply only to real data operations. Text
+earns database treatment when it contains either
+
+1. a SQL select statement: `select`, an optional `distinct` / `all` /
+   `top n`, a select list, then `from` and a target. The select list accepts
+   what SQL actually writes there — `*`, qualified and quoted names, function
+   calls such as `count(*)`, `max(created_at)`, `coalesce(a, b)`, or
+   `array_agg(id)`, parenthesised expressions, `CASE … END`, arithmetic,
+   `::` casts, and explicit `AS` aliases. The target accepts a name, a
+   subquery, or a `${table}` template interpolation. Literal `\n`, `\r`, and
+   `\t` escapes are normalized first, so SQL embedded in a single-line
+   JavaScript, Python, or Java string is recognized. Or
+2. a recognized data-client operation: a PostgREST-style `.from("table")`
+   handle followed by `select`, `insert`, `upsert`, `update`, or `delete`; a
+   `.storage.from("bucket")` handle followed by a storage operation; a
+   Firestore document read or write with its collection; or the equivalent
+   Appwrite and PocketBase document calls. A file is read as a data client only
+   when it also carries a recognized BaaS client signal.
+
+Two rules keep interface text out of the database controls, and nothing else
+is excluded:
+
+- an *implicit* alias — two bare words separated only by whitespace — is not a
+  select-list term, because that is the shape of English prose ("select an
+  option from the list") and of JSX attributes. `AS` aliases are accepted;
+- English determiners (`the`, `a`, `an`, `this`, `your`, …) are not `from`
+  targets.
+
+A DOM `<select>`, a `<Select>` component, a `react-select` import specifier, a
+`import { Select } from "…/ui/select"` specifier, generated component-library
+text, and prose containing the word "select" therefore satisfy neither rule and
+no longer contaminate `saas.database-discipline` or `saas.tenant-isolation`
+evidence. A direct data-client query is itself a durable-data signal, so a
+browser application with a hosted database and no migration directory stays
+eligible for the bounded-query finding; a query bounded by `limit`, `range`, or
+a single-row form does not create one.
+
+### Resource identity
+
+Accessed resources and policy targets are compared in two separate namespaces,
+`table:` and `bucket:`, because they are separate provider namespaces: a
+row-level-security policy on a table called `notes` is not coverage for a
+storage bucket called `notes`. A `storage.objects` policy target is the
+provider's own storage table and never covers a user table; the bucket it
+covers comes from its `bucket_id` predicate. A `storage.rules` file describes
+buckets, a `firestore.rules` file describes collections. Appwrite and
+PocketBase collection names are read from their document calls, so a
+document-API application can reach the covered state. Where no resource name
+can be read at all, coverage cannot be established and the control stays in the
+missing-evidence state.
 
 ## SaaS 10x audit lens
 
@@ -235,6 +349,9 @@ each map one-to-one to the remaining catalog rules.
   defect.
 - Tenant isolation is not applicable when no tenant-owned data signal is
   present. An uncertain product stage keeps feature-flag applicability neutral.
+- Unbounded-query and uncovered-tenant-query detection use the real-data-query
+  grammar defined in *Direct browser-to-BaaS data boundary*. A DOM `select`, a
+  UI component name, and generated component-library text are not queries.
 - The configuration boundary fails only when a value is used as runtime
   configuration, client or service initialization, a credential, a deployment
   endpoint, or a capacity setting: a connection string, a credential-shaped

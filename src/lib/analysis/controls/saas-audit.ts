@@ -1,4 +1,9 @@
 import * as signals from "../signals";
+import {
+  dataClientOperations,
+  hasRealDataQuery,
+  hasUnboundedDataQuery,
+} from "../browser-data-boundary";
 import { isStaticFrontendOnly } from "../static-frontend";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
@@ -348,16 +353,6 @@ function references(files: ReturnType<typeof sourceFiles>) {
   return files.slice(0, 4).map((file) => ({ path: file.path, kind: "code" as const }));
 }
 
-function hasUnboundedSql(content: string): boolean {
-  return content
-    .split(";")
-    .some(
-      (statement) =>
-        /\bselect\b/i.test(statement) &&
-        !/\b(limit|fetch\s+first|top\s*\()\b/i.test(statement),
-    );
-}
-
 function clientKinds(content: string): string[] {
   return ["fetch", "axios", "got", "undici", "resttemplate", "webclient", "httpclient", "requests", "http"]
     .filter((client) => new RegExp(`\\b${client}\\b`, "i").test(content));
@@ -485,13 +480,18 @@ export function saasAuditControls(): ControlEvaluator[] {
       });
     },
     (index) => {
-      const durable = signals.hasDurableData(index);
       const databaseSource = sourceFiles(index);
+      // A direct data-client query is itself durable-data evidence: a browser
+      // application can own a hosted database without a migration directory or
+      // a server-side driver dependency.
+      const durable =
+        signals.hasDurableData(index) ||
+        databaseSource.some((file) => dataClientOperations(file.content).present);
       const unbounded = references(
         databaseSource.filter(
           (file) =>
             /\bfindall\s*\(\s*\)/i.test(file.content) ||
-            hasUnboundedSql(file.content),
+            hasUnboundedDataQuery(file.content),
         ),
       );
       const nPlusOne = references(
@@ -768,7 +768,7 @@ export function saasAuditControls(): ControlEvaluator[] {
             (/(^|\/)(tenant|organization|workspace|account)(\/|$)/i.test(file.normalizedPath) ||
               /\b(tenant[_-]?id|organization[_-]?id|workspace[_-]?id|account[_-]?id)\b/i.test(file.content)) &&
             (/\bfindall\s*\(/i.test(file.content) ||
-              (/\bselect\b/i.test(file.content) &&
+              (hasRealDataQuery(file.content) &&
                 !/\bwhere\b[^;]{0,200}\b(tenant[_-]?id|organization[_-]?id|workspace[_-]?id|account[_-]?id)\b/i.test(file.content))),
         ),
       );

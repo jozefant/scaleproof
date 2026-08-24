@@ -1,4 +1,9 @@
 import * as signals from "../signals";
+import {
+  browserDataBoundary,
+  browserPersonalDataLogEvidence,
+} from "../browser-data-boundary";
+import { staticFrontendProfile } from "../static-frontend";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
 
@@ -151,6 +156,44 @@ export const securityDetectorMetadata = helpers.defineDetectorMetadata([
     strongestEvidenceTier: "enforced",
     confidenceLimitation: "Static matching cannot prove proxy behavior, runtime path construction, or deployed rewrite precedence.",
     remediationCode: "add-quality-gate",
+  },
+  {
+    id: "security.client-data-boundary",
+    claim:
+      "Direct browser access to a backend-as-a-service table, document collection, or storage bucket is matched against versioned row-level-security or storage policy definitions in this repository.",
+    applicability:
+      "Repositories whose reachable browser code calls a BaaS data or storage API directly.",
+    requiredSignals: [
+      "Direct BaaS table, document, or storage operation in reachable browser code",
+      "Versioned RLS, policy, or provider rule definition covering each accessed resource",
+    ],
+    disqualifyingSignals: [
+      "Client-side identity predicate such as .eq(\"user_id\", user.id)",
+      "Browser session or role state",
+      "Policy definitions that do not cover the accessed resource",
+    ],
+    strongestEvidenceTier: "enforced",
+    confidenceLimitation:
+      "Repository policy files cannot prove the deployed project applies them, and their absence is missing repository evidence rather than proof that the deployed policy is absent or broken.",
+    remediationCode: "harden-auth-boundary",
+  },
+  {
+    id: "security.browser-data-logging",
+    claim:
+      "Reachable browser code does not log session, user, email, token, or profile values.",
+    applicability: "Repositories that ship a browser bundle.",
+    requiredSignals: [
+      "Browser log or alert call whose argument expression, after string and template literals are removed, references a session, user, email, token, or profile value",
+    ],
+    disqualifyingSignals: [
+      "Generic error or status logging with no personal value flow",
+      "Message text that only mentions a personal-data word",
+      "Server-side logging, which is assessed by ops.log-redaction",
+    ],
+    strongestEvidenceTier: "enforced",
+    confidenceLimitation:
+      "Static argument analysis cannot follow indirect assignment, and a clean result does not prove that no browser log producer ever emits personal data.",
+    remediationCode: "separate-log-types",
   },
   {
     id: "security.secret-gate",
@@ -447,6 +490,112 @@ export function securityControls(): ControlEvaluator[] {
           ? signals.mergeEvidence(...providerBoundaries.map((boundary) => boundary.evidence))
           : [],
         partial: signals.mergeEvidence(...functionBoundaries.map((boundary) => boundary.evidence)),
+      });
+    },
+    (index) => {
+      const boundary = browserDataBoundary(index);
+      const control = {
+        id: "security.client-data-boundary",
+        domain: "security" as const,
+        remediationCode: "harden-auth-boundary",
+        severity: "high" as const,
+        weight: 3,
+      };
+      if (!boundary.directDataAccess) {
+        return helpers.result({
+          ...control,
+          title: "Direct browser data boundary",
+          summary: boundary.authClient
+            ? "Reachable browser code uses a backend-as-a-service authentication client but makes no direct table, document, or storage call, so there is no direct client-data boundary to assess."
+            : "No direct browser call to a backend-as-a-service table, document collection, or storage bucket was found in reachable browser code.",
+          outcome: "not_applicable",
+          evidenceTier: "absent",
+        });
+      }
+
+      const operations = [
+        boundary.tableRead ? "table reads" : "",
+        boundary.tableMutation ? "table writes" : "",
+        boundary.storageRead ? "storage reads" : "",
+        boundary.storageMutation ? "storage writes" : "",
+      ].filter(Boolean);
+      const clientPredicateNote = boundary.clientIdentityPredicate
+        ? " A client-side identity predicate narrows the request inside the user's own browser; it is a user-experience filter, not server-side authorization."
+        : " Browser session and role state run inside the user's own browser and are not server-side authorization.";
+
+      if (boundary.policyCoversAccessedResources) {
+        return helpers.result({
+          ...control,
+          title: "Direct browser data access has versioned policy evidence",
+          summary:
+            `Reachable browser code performs ${operations.join(", ")} directly against the data service, and versioned row-level-security or storage policy definitions in this repository cover every accessed resource.` +
+            clientPredicateNote +
+            " Repository policy evidence does not prove that the deployed project applies it.",
+          outcome: "pass",
+          evidenceTier: "enforced",
+          evidence: signals.mergeEvidence(
+            boundary.policyEvidence,
+            boundary.clientEvidence,
+          ),
+        });
+      }
+
+      return helpers.result({
+        ...control,
+        title: "Server-side policy evidence is missing for direct browser data access",
+        summary:
+          `Reachable browser code performs ${operations.join(", ")} directly against the data service.` +
+          clientPredicateNote +
+          (boundary.policyEvidence.length > 0
+            ? " This repository contains versioned policy definitions, but none of them covers every accessed resource."
+            : " This repository contains no versioned row-level-security, storage-policy, or provider-rule definition for the accessed resource.") +
+          " That is missing repository evidence, not a finding that the deployed policy is absent or broken; confirm the deployed policy and commit it so the boundary is reviewable.",
+        outcome: "unknown",
+        evidenceTier: "absent",
+        evidence: signals.mergeEvidence(
+          boundary.clientEvidence,
+          boundary.policyEvidence,
+        ),
+      });
+    },
+    (index) => {
+      const control = {
+        id: "security.browser-data-logging",
+        domain: "security" as const,
+        title: "Browser logging of personal and session data",
+        remediationCode: "separate-log-types",
+        severity: "medium" as const,
+        weight: 2,
+      };
+      if (!staticFrontendProfile(index).browserBundle) {
+        return helpers.result({
+          ...control,
+          summary:
+            "No browser bundle was found, so browser-side logging of personal data is outside the observed product shape. Server-side logging is assessed by the log-redaction control.",
+          outcome: "not_applicable",
+          evidenceTier: "absent",
+        });
+      }
+      const leaks = browserPersonalDataLogEvidence(index);
+      if (leaks.length > 0) {
+        return helpers.result({
+          ...control,
+          title: "Browser code logs session or personal data",
+          summary:
+            "Reachable browser code passes a session, user, email, token, or profile value to a browser log or alert call. Browser consoles are readable by the visitor and are frequently captured by session-replay and error-reporting tools, so remove or redact the value before release.",
+          outcome: "fail",
+          evidenceTier: "enforced",
+          evidence: leaks,
+        });
+      }
+      return helpers.result({
+        ...control,
+        summary:
+          index.snapshot.coverage.partial
+            ? "The scan was partial, so browser logging of session or personal data could not be assessed across the whole repository."
+            : "No browser log or alert call carrying a session, user, email, token, or profile value was found. Message text mentioning personal data without a matching value flow is not treated as leakage.",
+        outcome: index.snapshot.coverage.partial ? "unknown" : "pass",
+        evidenceTier: index.snapshot.coverage.partial ? "runtime_only" : "inferred",
       });
     },
     (index) =>

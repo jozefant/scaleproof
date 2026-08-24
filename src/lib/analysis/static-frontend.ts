@@ -153,11 +153,28 @@ function hasBrowserBundle(files: IndexedFile[]): boolean {
   return bundleMarker && view;
 }
 
+/**
+ * A single file's server-surface test, shared with the browser-data-boundary
+ * profile so both use one definition of "this file is not browser code".
+ */
+export function isServerSurfaceFile(
+  normalizedPath: string,
+  content: string,
+): boolean {
+  return (
+    SERVER_SURFACE_PATHS.some((pattern) => pattern.test(normalizedPath)) ||
+    SERVER_RUNTIME_CONTENT.some((pattern) => pattern.test(content))
+  );
+}
+
+/** Tests, fixtures, examples, documentation, and stories are not the product. */
+export function isNonApplicationPath(normalizedPath: string): boolean {
+  return NON_APPLICATION_PATH.test(normalizedPath);
+}
+
 function hasServerSurface(files: IndexedFile[]): boolean {
-  return files.some(
-    (file) =>
-      SERVER_SURFACE_PATHS.some((pattern) => pattern.test(file.normalizedPath)) ||
-      SERVER_RUNTIME_CONTENT.some((pattern) => pattern.test(file.content)),
+  return files.some((file) =>
+    isServerSurfaceFile(file.normalizedPath, file.content),
   );
 }
 
