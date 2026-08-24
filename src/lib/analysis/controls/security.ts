@@ -3,6 +3,7 @@ import {
   browserDataBoundary,
   browserPersonalDataLogEvidence,
 } from "../browser-data-boundary";
+import { credentialScope } from "../file-roles";
 import { staticFrontendProfile } from "../static-frontend";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
@@ -128,13 +129,22 @@ function hasSpaCatchAllRewrite(path: string, content: string, route: string): bo
 export const securityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "security.exposed-secret",
-    claim: "Scanned text is checked for high-confidence credential patterns.",
-    applicability: "Every processed repository text file outside excluded fixture paths.",
-    requiredSignals: ["High-confidence private-key, provider-token, or assigned-secret pattern"],
-    disqualifyingSignals: ["Examples, fixtures, documentation, lock files, or partial-scan absence"],
+    claim:
+      "Scanned text is checked for high-confidence credential patterns, and a match is only reported as a production credential when it sits in production or deployment-configuration scope.",
+    applicability:
+      "Every processed repository text file outside Markdown and dependency lock files.",
+    requiredSignals: [
+      "High-confidence private-key, provider-token, or assigned-secret pattern",
+      "Production or deployment-configuration scope, including continuous-integration definitions",
+    ],
+    disqualifyingSignals: [
+      "Test source sets, fixtures, examples, generated artifacts, documentation, and offline migration or seed scripts, which are reported as a non-critical review signal instead",
+      "Public client keys such as anon or publishable values",
+      "Partial-scan absence",
+    ],
     strongestEvidenceTier: "enforced",
     confidenceLimitation:
-      "Pattern matching can miss encoded secrets and cannot establish revocation status.",
+      "Pattern matching can miss encoded secrets, cannot establish revocation status, and cannot prove that a value declared non-production is not also deployed.",
     remediationCode: "remove-exposed-secret",
   },
   {
@@ -290,32 +300,66 @@ export const securityDetectorMetadata = helpers.defineDetectorMetadata([
 export function securityControls(): ControlEvaluator[] {
   return [
     (index) => {
-      const likelySecrets = signals.findContentMatching(
+      // A credential-shaped value is only a production credential leak when it
+      // sits in production or deployment-configuration scope. The same value in
+      // a test source set, a fixture, a generated artifact, or an offline
+      // migration or seed script is a review signal: it is still reported, but
+      // it cannot assert a deployed secret or drive a mandatory action.
+      const scanExclusions = [/\.md$/, /package-lock\.json$/];
+      const productionSecrets = signals.findContentMatching(
         index,
         containsLikelySecret,
         {
-          excludePathPatterns: [
-            /(^|\/)(test|tests|fixtures|examples?|docs)\//,
-            /\.md$/,
-            /package-lock\.json$/,
-          ],
+          excludePathPatterns: scanExclusions,
+          matchesFile: (file) =>
+            credentialScope(file.normalizedPath, file.content) === "production",
+          maxResults: 6,
+        },
+      );
+      const nonProductionSecrets = signals.findContentMatching(
+        index,
+        containsLikelySecret,
+        {
+          excludePathPatterns: scanExclusions,
+          matchesFile: (file) =>
+            credentialScope(file.normalizedPath, file.content) ===
+            "non_production",
           maxResults: 6,
         },
       );
 
-      if (likelySecrets.length > 0) {
+      if (productionSecrets.length > 0) {
         return helpers.result({
           id: "security.exposed-secret",
           domain: "security",
           title: "Likely exposed credential",
           summary:
-            "A credential-shaped value was found. Its value is redacted and never included in the report or model payload.",
+            "A credential-shaped value was found in production or deployment-configuration scope. Its value is redacted and never included in the report or model payload.",
           remediationCode: "remove-exposed-secret",
           severity: "critical",
           weight: 5,
           outcome: "fail",
           evidenceTier: "enforced",
-          evidence: likelySecrets,
+          evidence: signals.mergeEvidence(
+            productionSecrets,
+            nonProductionSecrets,
+          ),
+        });
+      }
+
+      if (nonProductionSecrets.length > 0) {
+        return helpers.result({
+          id: "security.exposed-secret",
+          domain: "security",
+          title: "Credential-shaped value in non-production scope",
+          summary:
+            "A credential-shaped value was found only in explicitly non-production scope such as test code, a fixture, a generated artifact, or an offline script. Its value is redacted. This is a review signal, not evidence of a deployed credential, so it does not create a critical production-secret finding or a mandatory removal action.",
+          remediationCode: "remove-exposed-secret",
+          severity: "medium",
+          weight: 5,
+          outcome: "unknown",
+          evidenceTier: "inferred",
+          evidence: nonProductionSecrets,
         });
       }
 

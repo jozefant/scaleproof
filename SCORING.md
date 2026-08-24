@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.8-hackathon`
+Version: `0.8.9-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -111,6 +111,89 @@ assembly. There is no generic fallback rule.
 benchmark, configured command, or enforced performance budget. A
 `performance/README.md` can earn documented evidence when it contains a plan;
 its path alone never establishes a repeatable performance test.
+
+## Execution-context file roles
+
+Repository evidence and production-execution evidence are different facts. A
+fixed credential in `src/test/resources` is a test property, not a deployed key.
+A loop around a repository lookup inside a one-off import script is a batch job,
+not a request-path N+1. A generated component-library primitive is vendored
+code, not a request handler.
+
+Every file therefore carries one internal execution role:
+
+| Role | Recognized by |
+| --- | --- |
+| `production` | Everything not matched below: application source and deployment configuration |
+| `test` | Build-tool test source sets (`src/test/...`), `tests`, `__tests__`, `spec`, `e2e`, `cypress`, and mock directories; `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.go`, `*_spec.rb`, `conftest.py`, runner configuration; explicitly non-production configuration such as `application-test.properties`, `.env.test`, `.env.example`, `compose.test.yml`; and framework signals such as `@SpringBootTest`, an `org.junit` import, `import pytest`, or a `describe`/`it` suite |
+| `fixture` | `fixtures`, `examples`, `samples`, `demo`, and Storybook directories; `*.fixture.*` and `*.stories.*` |
+| `generated` | `node_modules`, `vendor`, `third_party`, framework build directories, `target`, `__generated__`; dependency lock files; `*.min.*`, `*.generated.*`, `*.pb.go`, `*_pb2.py`, `*.d.ts`; a generated-artifact banner in the file header; and `components/ui/*` primitives that carry a component-library generator's own dependency signature |
+| `documentation` | `docs`, `adr`, and wiki directories; `*.md`, `*.mdx`, `*.rst`, `*.txt`; `LICENSE`, `CHANGELOG`, and similar |
+| `tooling` | `scripts`, `tools`, `bin`, `automation`, `migrations`, `seeds`, and CI directories; `Makefile`; seed, backfill, migrate, and importer entry points; numbered SQL migrations |
+
+The role is internal. It changes applicability and severity inside the
+deterministic engine and is asserted in tests. It is never added to a check
+result, never rendered into the public report, and never sent to a model. The
+public report keeps exactly what it had before: safe paths and deterministic
+summaries.
+
+### Credential scope
+
+`security.exposed-secret` separates a credential-shaped value in
+production or deployment-configuration scope from one in explicitly
+non-production scope. Continuous-integration definitions are the deliberate
+exception to the role mapping: they are offline tooling for execution purposes,
+but they hold real deployment credentials, so they stay in production scope.
+
+| Scope of the match | Outcome | Evidence tier | Severity | Action |
+| --- | --- | --- | --- | --- |
+| Production or deployment configuration, including CI definitions | `fail` | `enforced` | `critical` | `remove-exposed-secret`, mandatory |
+| Only test, fixture, generated, documentation, or offline tooling | `unknown` | `inferred` | `medium` | None; the control earns no positive credit |
+| No match | `pass` (`inferred`), or `unknown` (`runtime_only`) on a partial scan | | `critical` | None |
+
+A non-production match is a review signal, not silence: the finding, its safe
+paths, and its summary all remain in the evidence dossier, and the control earns
+zero credit toward the security domain. It cannot claim a deployed credential
+and cannot create a mandatory removal action. When production-scope evidence
+exists as well, the finding is the critical one and lists both sets of paths.
+Markdown and dependency lock files remain outside the credential scan entirely.
+Matched values are never retained.
+
+### Request-path scope
+
+`saas.database-discipline`, `saas.slow-work`, and `saas.failure-safety` describe
+what happens while a user waits. They are therefore read only from the reachable
+production call graph: implementation evidence, statically reachable from an
+application entry point where reachability can be resolved, and classified as
+`production`. A test, fixture, generated artifact, migration, seed, or offline
+importer cannot create an N+1, unbounded-query, missing-timeout, or synchronous
+external-work failure on its own.
+
+A recognized client token is also not an external dependency when it is a method
+on a persistence handle: `userRepository.fetch(id)` and `db.fetch(id)` are
+database service calls. Real production N+1 patterns and reachable production
+external clients still produce the same concrete failures and the same mandatory
+actions as before.
+
+Non-production files remain fully usable as what they are. Migrations still
+count as migration evidence, tests still count for test distribution and CI
+gates, and documentation still earns documented evidence.
+
+### Module layout
+
+`arch.module-boundaries` passes on either of two signals:
+
+1. a workspace or multi-module build definition together with at least two
+   module manifests, as before; or
+2. at least two independently buildable nested module manifests in distinct
+   directories — for example `backend/pom.xml` and `frontend/package.json`.
+
+A root workspace manifest is not required. Manifests in test, fixture, example,
+generated, vendored, documentation, or offline-tooling directories are not
+modules. When the control passes, machine-readable contracts, per-module CI
+definitions, and documented module boundaries are merged into its evidence. The
+result stays a layout signal at evidence tier `inferred`; it is never proof of
+low coupling or independent deployability.
 
 ## Static-frontend evidence profile
 
@@ -309,9 +392,9 @@ score or a fourth intake question.
 | Rule | Control | Domain / highest severity | Static audit scope |
 | --- | --- | --- | --- |
 | Stateless tier | `saas.stateless-tier` | Reliability / High | Session, user, tenant, or job state in memory; request-path stateful local writes only. |
-| Database discipline | `saas.database-discipline` | Reliability / High | Unbounded queries, explicit N+1 loop patterns, bounded requests, migrations, query-predicate/index overlap, and read/write-replica readiness where configured. |
-| Slow request work | `saas.slow-work` | Reliability / High | HTTP, mail, and similar work in request handlers; queue, worker, scheduler, or asynchronous boundary evidence. |
-| Failure safety | `saas.failure-safety` | Reliability / Critical | Timeout and retry/backoff/idempotency evidence at the same call site or from an explicit library-wide default; payment and webhook handlers require local idempotency evidence. |
+| Database discipline | `saas.database-discipline` | Reliability / High | Unbounded queries, explicit N+1 loop patterns, bounded requests, migrations, query-predicate/index overlap, and read/write-replica readiness where configured. Failures are read only from the reachable production call graph. |
+| Slow request work | `saas.slow-work` | Reliability / High | HTTP, mail, and similar work in reachable production request handlers; queue, worker, scheduler, or asynchronous boundary evidence. |
+| Failure safety | `saas.failure-safety` | Reliability / Critical | Timeout and retry/backoff/idempotency evidence at the same call site or from an explicit library-wide default, in reachable production source; payment and webhook handlers require local idempotency evidence. |
 | Configuration boundary | `saas.config-boundary` | Security / Medium | Values used as runtime configuration, client or service initialization, credentials, deployment endpoints, or capacity settings in production source; environment-owned configuration and pool settings in source or deployment configuration. |
 | Tenant isolation | `saas.tenant-isolation` | Security / Critical | Tenant-owned data, central RLS/filter/repository boundaries, and direct tenant queries without a visible predicate or central boundary. |
 | Observability | `saas.observability` | Operations / High | Metrics/tracing plus correlation propagation or independently detected structured logging. |
@@ -352,6 +435,9 @@ each map one-to-one to the remaining catalog rules.
 - Unbounded-query and uncovered-tenant-query detection use the real-data-query
   grammar defined in *Direct browser-to-BaaS data boundary*. A DOM `select`, a
   UI component name, and generated component-library text are not queries.
+- Database, slow-work, and failure-safety findings apply the request-path scope
+  defined in *Execution-context file roles*. A database service call on a
+  persistence handle is never read as an external dependency.
 - The configuration boundary fails only when a value is used as runtime
   configuration, client or service initialization, a credential, a deployment
   endpoint, or a capacity setting: a connection string, a credential-shaped

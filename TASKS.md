@@ -118,7 +118,7 @@ Acceptance:
 - Focused synthetic tests, `npm run test:e2e`, and `npm run verify` pass. No
   real repository is used by automated tests or CI.
 
-### [ ] P0.10 Separate production execution evidence from test, generated, and offline tooling
+### [done] P0.10 Separate production execution evidence from test, generated, and offline tooling
 
 Corpus comparisons show that a security-sensitive multi-module repository can
 receive a critical exposed-secret verdict from explicitly non-production test

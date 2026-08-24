@@ -4,6 +4,7 @@ import {
   hasRealDataQuery,
   hasUnboundedDataQuery,
 } from "../browser-data-boundary";
+import { isProductionExecutionFile } from "../file-roles";
 import { isStaticFrontendOnly } from "../static-frontend";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
@@ -33,6 +34,29 @@ const CLIENT_PATTERNS = [
 const TIMEOUT_PATTERNS = [
   /\b(abortsignal\.timeout|setconnecttimeout|setreadtimeout|connecttimeout|readtimeout)\b|timeout\s*:/i,
 ];
+/**
+ * A recognized client token is only an external dependency when it is not a
+ * method on a persistence handle. `userRepository.fetch(id)` and `db.fetch(id)`
+ * are database service calls: they are not evidence of an outbound network
+ * dependency, and they must not create a slow-work or failure-safety finding.
+ */
+const EXTERNAL_CLIENT_CALL = new RegExp(
+  CLIENT_PATTERNS.map((pattern) => pattern.source).join("|"),
+  "gi",
+);
+const PERSISTENCE_HANDLE_PREFIX =
+  /(?:repository|repositories|repo|entitymanager|jdbctemplate|datasource|prisma|knex|sequelize|mongoose|typeorm|supabase|firestore|dao|querybuilder|queryrunner|db|database|collection|session|store)\s*\.\s*$/i;
+
+function hasExternalClientCall(content: string): boolean {
+  for (const match of content.matchAll(EXTERNAL_CLIENT_CALL)) {
+    const start = match.index ?? 0;
+    const before = content.slice(Math.max(0, start - 60), start);
+    if (PERSISTENCE_HANDLE_PREFIX.test(before)) continue;
+    return true;
+  }
+  return false;
+}
+
 const RETRY_SAFETY_PATTERNS = [
   /\b(idempotency[-_ ]?key|idempotent|retry.{0,80}(backoff|exponential)|@retryable.{0,80}backoff|circuit.?breaker|bulkhead|backpressure)\b/is,
 ];
@@ -194,9 +218,12 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
     id: "saas.database-discipline",
     claim: "Database-backed request paths show bounded-query and schema-index foundations.",
     applicability:
-      "Repositories with durable-data signals. Not applicable to a static-frontend repository with no server surface.",
+      "Reachable production source in repositories with durable-data signals. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Pagination or query-limit signal and migration/index evidence"],
-    disqualifyingSignals: ["Database dependency alone"],
+    disqualifyingSignals: [
+      "Database dependency alone",
+      "Unbounded or N+1 patterns that appear only in test, fixture, generated, migration, or offline-script files",
+    ],
     strongestEvidenceTier: "inferred",
     confidenceLimitation: "Static patterns cannot prove query plans, cardinality, or production contention.",
     remediationCode: "add-load-path",
@@ -205,9 +232,13 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
     id: "saas.slow-work",
     claim: "Potentially slow external work is separated from synchronous request handling.",
     applicability:
-      "Repositories with detected HTTP, mail, report, or file-generation work. Not applicable to a static-frontend repository with no server surface.",
+      "Reachable production request handlers with detected HTTP, mail, report, or file-generation work. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Queue, worker, scheduler, or explicit asynchronous boundary"],
-    disqualifyingSignals: ["Async syntax alone"],
+    disqualifyingSignals: [
+      "Async syntax alone",
+      "External-client calls that appear only in test, fixture, generated, migration, or offline-script files",
+      "A client token that is a method on a persistence handle, which is a database service call rather than an external dependency",
+    ],
     strongestEvidenceTier: "inferred",
     confidenceLimitation: "A repository cannot prove runtime latency or that every slow path is decoupled.",
     remediationCode: "add-failure-controls",
@@ -216,9 +247,13 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
     id: "saas.failure-safety",
     claim: "External SaaS work has timeouts and retry or idempotency safety.",
     applicability:
-      "Repositories making external calls or processing webhooks or payments. Not applicable to a static-frontend repository with no server surface.",
+      "Reachable production source making external calls or processing webhooks or payments. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Configured timeout and retry, idempotency, or overload control"],
-    disqualifyingSignals: ["One unconfigured client call or generic reliability prose"],
+    disqualifyingSignals: [
+      "One unconfigured client call or generic reliability prose",
+      "External-client calls that appear only in test, fixture, generated, migration, or offline-script files",
+      "A client token that is a method on a persistence handle, which is a database service call rather than an external dependency",
+    ],
     strongestEvidenceTier: "enforced",
     confidenceLimitation: "Configuration cannot prove values are tuned or failure paths are exercised.",
     remediationCode: "add-failure-controls",
@@ -332,18 +367,40 @@ function sourceContent(index: Parameters<ControlEvaluator>[0], patterns: RegExp[
   });
 }
 
+/**
+ * Request-path evidence. A finding about what happens while a user waits may
+ * only be drawn from a reachable production handler, never from a test, a
+ * fixture, a generated artifact, a migration, or an offline script.
+ */
 function requestContent(index: Parameters<ControlEvaluator>[0], patterns: RegExp[]) {
   return signals.findContent(index, patterns, {
     pathPatterns: REQUEST_PATHS,
     excludePathPatterns: [TEST_OR_FIXTURE_PATH],
+    matchesFile: (file) => isProductionExecutionFile(index, file),
   });
 }
 
+function requestContentMatching(
+  index: Parameters<ControlEvaluator>[0],
+  matchesContent: (content: string) => boolean,
+) {
+  return signals.findContentMatching(index, matchesContent, {
+    pathPatterns: REQUEST_PATHS,
+    excludePathPatterns: [TEST_OR_FIXTURE_PATH],
+    matchesFile: (file) => isProductionExecutionFile(index, file),
+  });
+}
+
+/**
+ * The reachable production call graph, restricted to the languages whose
+ * static patterns this lens has reviewed. Test, fixture, generated, offline
+ * tooling, and documentation files are excluded: they are real evidence about
+ * the repository, but not about production execution.
+ */
 function sourceFiles(index: Parameters<ControlEvaluator>[0]) {
   return index.files.filter(
     (file) =>
-      signals.isImplementationEvidencePath(file.path) &&
-      signals.isReachableImplementationEvidenceFile(index, file) &&
+      isProductionExecutionFile(index, file) &&
       SOURCE_PATHS.some((pattern) => pattern.test(file.normalizedPath)) &&
       !TEST_OR_FIXTURE_PATH.test(file.normalizedPath),
   );
@@ -572,7 +629,7 @@ export function saasAuditControls(): ControlEvaluator[] {
       });
     },
     (index) => {
-      const requestClient = requestContent(index, CLIENT_PATTERNS);
+      const requestClient = requestContentMatching(index, hasExternalClientCall);
       const asyncPath = sourceContent(index, [
         /\b(bullmq|bull\.queue|sidekiq|celery|rabbitmq|kafka|sqs|@async|quartz|scheduler|job queue|worker)\b/i,
       ]);
@@ -606,7 +663,7 @@ export function saasAuditControls(): ControlEvaluator[] {
     (index) => {
       const globalDefaults = globalTimeoutKinds(index);
       const clientFiles = sourceFiles(index).filter((file) =>
-        CLIENT_PATTERNS.some((pattern) => pattern.test(file.content)),
+        hasExternalClientCall(file.content),
       );
       const clientObservations = [
         ...clientFiles.map((file) => {

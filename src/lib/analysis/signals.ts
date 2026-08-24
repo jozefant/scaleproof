@@ -11,11 +11,19 @@ export interface RepositoryIndex {
   files: Array<RepositoryFile & { normalizedPath: string }>;
 }
 
+type IndexedRepositoryFile = RepositoryFile & { normalizedPath: string };
+
 type ContentMatchOptions = {
   pathPatterns?: RegExp[];
   excludePathPatterns?: RegExp[];
   maxResults?: number;
   reachableSourceOnly?: boolean;
+  /**
+   * Additional per-file admission test. Path regular expressions cannot
+   * express execution-context questions such as "is this a production file
+   * rather than a test fixture", so callers supply that predicate here.
+   */
+  matchesFile?: (file: IndexedRepositoryFile) => boolean;
 };
 
 const GENERATED_ARTIFACT_PATH =
@@ -292,6 +300,9 @@ export function findContentMatching(
         pattern.test(file.normalizedPath),
       )
     ) {
+      continue;
+    }
+    if (options?.matchesFile && !options.matchesFile(file)) {
       continue;
     }
     if (matchesContent(file.content)) {
