@@ -1,6 +1,6 @@
 # Scaleproof implementation tasks
 
-Updated: 2026-07-21
+Updated: 2026-08-24
 
 This file is the current implementation backlog. Product boundaries belong in
 `README.md` and `AGENTS.md`; architecture, scoring, and security decisions
@@ -263,6 +263,50 @@ Acceptance:
 - Heuristic changes remain versioned and cannot silently change golden cases.
 - No claim says the heuristic is externally calibrated before this work is
   complete.
+
+### [ ] P2.3 Package Scaleproof as a public-repository CLI
+
+Make the existing public GitHub scan pipeline available as an installable Node
+22 command without changing the web app or widening its trust boundary. The
+task contains the durable packaging, runtime, and privacy requirements; update
+their canonical documentation owners when the feature is merged.
+
+Implementation:
+
+1. Add a sibling CLI adapter under `src/cli/` that parses arguments with
+   `node:util`, calls the existing repository acquisition, analysis, and report
+   modules directly, and never imports the HTTP route, Next.js, or React.
+2. Support exactly one public GitHub repository root URL or `--demo`, the
+   existing context enums, Markdown output, JSON stdout, privacy-safe stderr
+   progress, exit codes 0/1/2/130, and cleanup on error or SIGINT. Require
+   `OPENAI_API_KEY`; accept no credentials as flags and do not add local or
+   private-repository scanning.
+3. Add the publishable `cli/` directory, strict npm `files` allowlist, small
+   Node launcher, bundled Node 22 build, and install/usage documentation. Keep
+   the root package private; add no postinstall, telemetry, workspaces,
+   platform binaries, auto-update behaviour, or release automation.
+4. Bundle only the CLI entry with esbuild, injecting the package version at
+   build time. Externalize a dependency only when bundling demonstrably cannot
+   work, record the reason, and declare only that dependency in `cli/`.
+5. Add CLI build and focused synthetic tests to `npm run verify`. Do not
+   publish, commit, or push as part of this task.
+
+Acceptance:
+
+- `npm pack --dry-run` from `cli/` contains only its launcher, bundle, README,
+  and LICENSE; the root package remains private.
+- Help, version, valid arguments, invalid URLs/enums, conflicting input modes,
+  missing API key, cancellation, Markdown output, and JSON output have focused
+  automated coverage with the defined exit codes and stdout/stderr separation.
+- The CLI reuses the existing deterministic analysis, mandatory GPT-5.6
+  ordering, evidence, privacy filtering, limits, and cleanup behaviour; it
+  cannot write a partial report after acquisition or synthesis failure.
+- A synthetic end-to-end CLI run produces the same schema-valid report and no
+  more than three actions. Captured provider payloads retain the existing
+  categorical allowlist and contain no source, paths, repository identifiers,
+  contributor data, or credentials.
+- `npm run verify` passes, including the CLI bundle build, without real
+  repository scans or npm publication.
 
 ### [ ] F.1 Build a local-first standalone founder edition
 
