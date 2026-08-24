@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.6-hackathon`
+Version: `0.8.7-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -112,6 +112,79 @@ benchmark, configured command, or enforced performance budget. A
 `performance/README.md` can earn documented evidence when it contains a plan;
 its path alone never establishes a repeatable performance test.
 
+## Static-frontend evidence profile
+
+A repository can ship a browser bundle and no backend at all. Scoring that
+absent backend as a production-readiness failure produced founder actions for
+work the product does not contain, so a repository is classified as a
+**static frontend** when all of the following hold:
+
+1. A browser bundle is visible: an `index.html`, a recognized bundler or
+   framework configuration file, or a browser framework dependency in
+   `package.json`, together with at least one browser view file.
+2. No server surface: no framework API route, serverless or edge function
+   directory, server entry point, server-language source file, container or
+   platform deployment descriptor, and no server-runtime code pattern.
+3. No persistence client and no durable-data signal.
+4. No outbound data call: no `fetch`, HTTP client, WebSocket, data-fetching
+   hook, BaaS call, or hosted form service.
+5. No submission path leaving the browser: no form element carrying an
+   `action` that targets a URL or route, a `post` method, or a hosted form
+   service, and no submit handler in a file that also makes an outbound or
+   persistence call. A `mailto:`, `tel:`, or `sms:` link hands the visitor to
+   another application on their own device; it is a browser hand-off, never an
+   outbound data write, and never evidence that a backend exists. `action`,
+   `method`, and form-service attributes count only when they sit on a form
+   element, not when the same words appear elsewhere in the file.
+
+Any one of conditions 2 to 5 removes the repository from the profile. A client
+application that calls a real API, Supabase, storage, authentication, or
+database therefore stays outside the profile and keeps every data-boundary
+control assessable.
+
+In the profile, server-runtime controls report `not_applicable` instead of
+`fail` or missing evidence:
+
+| Area | Controls |
+| --- | --- |
+| Reliability | `rel.stateless`, `rel.database-foundations`, `rel.failure-controls`, `rel.health-lifecycle`, `rel.async-work`, `rel.load-tests`, `rel.ha-path`, `rel.actual-capacity` |
+| Operations | `ops.structured-logging`, `ops.log-categories`, `ops.log-redaction`, `ops.observability`, `ops.alerting`, `ops.runbook`, `ops.log-retention`, `ops.alert-delivery` |
+| Security | `security.authentication`, `security.authorization` |
+| SaaS lens | `saas.stateless-tier`, `saas.database-discipline`, `saas.slow-work`, `saas.failure-safety`, `saas.observability`, `saas.tenant-isolation` |
+
+Control identity, domain, severity, weight, and remediation code are unchanged;
+only outcome, evidence tier, evidence, and summary become the not-applicable
+form. `saas.config-boundary` is evaluated first and still fails on an embedded
+runtime value; it becomes `not_applicable` only when no such value exists and
+the repository has no deploy-time configuration or connection-pool surface.
+
+Nothing else is relaxed. Credential detection, client-route reachability, edge
+function boundaries, web-security baseline, input validation, quality gates,
+architecture, agent readiness, and ownership concentration stay fully
+assessable, and `not_applicable` controls are excluded from score and
+confidence exactly as before. Because the reliability and operations domains
+carry no applicable weight in this profile, their domain scores stay at 0 and
+a static frontend cannot reach `Fundable`; growth labels report
+`Insufficient evidence` rather than a capacity claim.
+
+### Product completeness
+
+`quality.form-completeness` reports what the product does today, in the quality
+domain, at `medium` severity and weight 3:
+
+- `fail` when reachable browser source contains visible `<form>` markup with no
+  submit handler, no form-element `action`, `post` method, or form-service
+  attribute, no hosted form service, no forwarded form props, no form-state
+  hook, and no outbound call in the same file. A form whose own `action` is a
+  `mailto:` does submit; a `mailto:` or `tel:` link elsewhere in the file is not
+  that form's submission path;
+- `pass` (`inferred`) when every visible form has one of those paths;
+- `not_applicable` when no visible form markup exists.
+
+The finding states only that input has no path out of the browser. It makes no
+claim about data handling, authentication, or resilience, and it never implies
+that a backend exists. Its remediation code is `complete-submission-path`.
+
 ## SaaS 10x audit lens
 
 The following is the canonical, versioned SaaS 10x rule catalog. It is adapted
@@ -125,7 +198,7 @@ score or a fourth intake question.
 | Database discipline | `saas.database-discipline` | Reliability / High | Unbounded queries, explicit N+1 loop patterns, bounded requests, migrations, query-predicate/index overlap, and read/write-replica readiness where configured. |
 | Slow request work | `saas.slow-work` | Reliability / High | HTTP, mail, and similar work in request handlers; queue, worker, scheduler, or asynchronous boundary evidence. |
 | Failure safety | `saas.failure-safety` | Reliability / Critical | Timeout and retry/backoff/idempotency evidence at the same call site or from an explicit library-wide default; payment and webhook handlers require local idempotency evidence. |
-| Configuration boundary | `saas.config-boundary` | Security / Medium | Non-local endpoints or credential-shaped values in production source; environment-owned configuration and pool settings in source or deployment configuration. |
+| Configuration boundary | `saas.config-boundary` | Security / Medium | Values used as runtime configuration, client or service initialization, credentials, deployment endpoints, or capacity settings in production source; environment-owned configuration and pool settings in source or deployment configuration. |
 | Tenant isolation | `saas.tenant-isolation` | Security / Critical | Tenant-owned data, central RLS/filter/repository boundaries, and direct tenant queries without a visible predicate or central boundary. |
 | Observability | `saas.observability` | Operations / High | Metrics/tracing plus correlation propagation or independently detected structured logging. |
 | Release control | `saas.feature-flags` | Quality / Medium | Feature flags and configuration-gated kill switches for live or scaling applications. |
@@ -162,6 +235,19 @@ each map one-to-one to the remaining catalog rules.
   defect.
 - Tenant isolation is not applicable when no tenant-owned data signal is
   present. An uncertain product stage keeps feature-flag applicability neutral.
+- The configuration boundary fails only when a value is used as runtime
+  configuration, client or service initialization, a credential, a deployment
+  endpoint, or a capacity setting: a connection string, a credential-shaped
+  assignment, a URL passed to a client constructor or request call, or a URL
+  bound to a runtime-configuration name. Ordinary `href` links, image, media,
+  font, documentation, and other static-content URLs, asset file extensions,
+  local hosts, comments, and test or fixture paths are not configuration
+  findings. Asset and content base URLs are classified by identifier: a name
+  built from `cdn`, `static`, `public`, `asset`, `upload`, or any other
+  content token is an asset base, not a deploy-time endpoint, so a value such
+  as `cdnUrl` or `cdnBase` never fails. Service and infrastructure names such
+  as `apiHost`, `gatewayEndpoint`, `redisHost`, `databaseUrl`, or `baseUrl`
+  still fail.
 - Dependency EOL and lockfile age require a maintained, dated compatibility
   source. Until one is deliberately added, dependency freshness is runtime-only
   and makes no EOL claim.

@@ -166,7 +166,8 @@ export const securityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "security.authentication",
     claim: "An authentication library and server enforcement point are both present.",
-    applicability: "Applications handling personal data or unknown data sensitivity.",
+    applicability:
+      "Applications handling personal data or unknown data sensitivity. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Authentication framework or dependency", "Server-side enforcement point"],
     disqualifyingSignals: ["Authentication package name alone"],
     strongestEvidenceTier: "enforced",
@@ -177,7 +178,8 @@ export const securityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "security.authorization",
     claim: "Server-side authorization or permission checks are present.",
-    applicability: "Applications handling personal data or unknown data sensitivity.",
+    applicability:
+      "Applications handling personal data or unknown data sensitivity. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Authorization, role, authority, RBAC, or permission check in server code"],
     disqualifyingSignals: ["Client-only role display or authorization documentation"],
     strongestEvidenceTier: "enforced",

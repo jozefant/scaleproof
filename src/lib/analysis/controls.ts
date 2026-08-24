@@ -1,4 +1,5 @@
 import { createRepositoryIndex } from "./signals";
+import { applyStaticFrontendApplicability } from "./static-frontend";
 import type { CheckResult, ScanContext } from "./types";
 import { architectureControls } from "./controls/architecture";
 import { agentReadinessControls } from "./controls/agent-readiness";
@@ -25,5 +26,8 @@ export function evaluateControls(
     ...saasAuditControls(),
   ];
 
-  return evaluators.map((evaluate) => evaluate(index, context));
+  return applyStaticFrontendApplicability(
+    index,
+    evaluators.map((evaluate) => evaluate(index, context)),
+  );
 }

@@ -47,9 +47,9 @@ Below-gate path proven: `--threshold 99` exits 1.
 | --- | --- |
 | 1. `test:e2e:coverage` >= 60.0% | **64.8% pass** (re-prove at the end) |
 | 2. `npm run verify` green | baseline green; re-prove after last change |
-| 3. 7 tasks checked in TASKS.md | UI.1, P0.6 done (2/7) |
+| 3. 7 tasks checked in TASKS.md | UI.1, P0.6, P2.3 done (3/7) |
 | 4. `docs/node24-upgrade-plan.md` | written, plan-only |
-| 5. `npm pack --dry-run` in `cli/` | not started |
+| 5. `npm pack --dry-run` in `cli/` | passes, see round 3 caveat |
 | 6. one commit per task, clean tree | not started |
 | 7. NOTES.md final status table | this file |
 
@@ -85,6 +85,25 @@ Below-gate path proven: `--threshold 99` exits 1.
   and read -473.5px. Needs `behavior: "instant"`.
 - Trusting monocart's line totals unchecked. See confirmed finding 2.
 
+## Round 3 — P2.3 CLI (builder done, critic running)
+
+Builder report: `src/cli/` adapter (main, entry, version, demo-fixture, errors),
+`cli/` publishable package, `scripts/build-cli.mjs`, 58 focused tests over 4
+files. `build:cli` wired into `verify`.
+
+Escalation resolved rather than deferred: P2.3 item 2 requires `--demo` to work,
+item 3 forbids shipping anything but launcher/bundle/README/LICENSE. Those
+conflict, because the demo needs `fixtures/scaleproof-demo`. Resolution: embed
+the fixture in the bundle at build time (esbuild `define`), materialize to a
+temp dir, reuse `acquireDemoRepository` unchanged, clean up in `finally`. Cost
+1,280 raw bytes. Both requirements now hold.
+
+**Open item for the final report:** `npm pack --dry-run` lists five files, not
+four - launcher, bundle, README, LICENSE **plus `package.json`**, which npm
+always includes and no `files` entry can exclude. Checklist item 5 says "only
+the launcher, bundle, README, and LICENSE". Reported as-is rather than claimed
+clean.
+
 ## Round 2 — UI.1 and P0.6
 
 - UI.1 committed `0520f15`, critic PASS (verdicts below). Critic's kicker
@@ -114,6 +133,38 @@ Independent critic subagent, own measurements (throwaway spec, deleted after).
 | Playwright check requires visual clearance, not a touching bounding box | MET | `headingInkClearance` uses `Range.selectNodeContents` ink rect; old bounding-box assertion kept, not replaced. |
 | Saved desktop/mobile artifacts show no clipped title, overflow, or control regression | MET | Critic opened four PNGs; titles intact, controls correct, overflow assertion byte-identical in the diff. |
 | Presentation-only, no heuristic/scoring/privacy change | MET | diff is 3 files; no scanner, scoring, contract, or security file touched. |
+
+### P2.3 — **PASS**
+
+Critic ran the built launcher itself from an empty directory to prove the
+embedded fixture works: acquisition succeeded, progress reached deterministic
+analysis, failure was the expected `4xx / authentication` from the dummy key,
+exit 1, stdout empty (no partial report). It also re-derived the provider
+payload allowlist from `synthesis.ts` independently and confirmed the test
+asserts exact sorted key equality (a positive allowlist, not a deny-list).
+Concern taken: `cli/README.md` said "contains four files" while `npm pack`
+lists five - reworded to state the manifest is unavoidable.
+
+### P1.0 — **PASS** (mutation-verified)
+
+Critic backed up `saas-audit.ts` (sha256 recorded), neutered
+`hasEmbeddedRuntimeConfiguration`, saw **6 tests fail**, restored byte-for-byte
+and confirmed 90 passing. Golden scenarios byte-identical
+(`git diff -- calibration.test.ts calibration-fixtures.ts` empty). Nothing new
+reaches OpenAI - `src/lib/ai/**` untouched, `AllowlistedFinding` unchanged.
+
+Two critic concerns were **not** deferred, because both reintroduce the exact
+defect P1.0 exists to remove:
+
+1. `mailto:` anywhere in a file set `submissionPath: true`, ejecting a landing
+   page from the static profile and re-enabling all 24 server-runtime failures.
+   Sent back for fix.
+2. `cdn` / `host` in `RUNTIME_CONFIGURATION_TOKENS` made an asset base URL a
+   configuration failure; the fixture only escaped by luck (`logo` token).
+   Sent back for fix.
+
+Implementer escalation recorded, not decided: zero-applicable-weight domains
+still score 0 -> filed as **P1.2**.
 
 ### P0.6 — **PASS** (mutation-verified)
 

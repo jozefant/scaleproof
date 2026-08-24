@@ -167,7 +167,7 @@ Acceptance:
 - Focused synthetic tests and `npm run verify` pass without using real
   repositories in CI.
 
-### [ ] P1.0 Classify static frontend content separately from deploy-time runtime configuration
+### [done] P1.0 Classify static frontend content separately from deploy-time runtime configuration
 
 A static React marketing site with only public image links was scored as having
 embedded runtime configuration, and received founder actions for backend-scale
@@ -287,6 +287,29 @@ Validation:
 npm run test:e2e
 npm run verify
 ```
+
+### [ ] P1.2 Exclude zero-applicable-weight domains from the weighted score
+
+Raised by the P1.0 implementer as a scoring-model question outside P1.0's
+scope, and recorded rather than decided.
+
+`scoreChecks` returns `score: 0` when `assessableWeight === 0`. Under the new
+static-frontend profile a static site therefore shows "Reliability 0/100" and
+"Observability 0/100" while every control in those domains reads "Not
+applicable". This is not a regression - those controls previously scored 0 as
+missing evidence - and the 0 is what keeps a static site below `Fundable`
+(maximum reachable score 70). But a founder-facing 0 beside all-not-applicable
+controls reads as a failure rather than an absence of scope.
+
+Acceptance:
+
+- A domain with no assessable weight is either excluded from the weighted sum
+  or displayed as not assessed, never as a 0 score.
+- The verdict cap that currently depends on those zeros is preserved
+  explicitly, not by accident: a static frontend still cannot reach `Fundable`.
+- Golden scenarios are unchanged unless the change is intended and versioned.
+- Heuristic version, [`SCORING.md`](./SCORING.md), and focused tests updated
+  together; `npm run verify` passes.
 
 ### [ ] P2.2 Complete external heuristic calibration
 
