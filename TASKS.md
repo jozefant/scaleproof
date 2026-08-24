@@ -216,7 +216,7 @@ Acceptance:
 - Tests preserve the no-source/no-path-to-GPT boundary, heuristic version and
   [`SCORING.md`](./SCORING.md) are updated, and `npm run verify` passes.
 
-### [ ] UI.1 Prevent the sticky report header from clipping section titles
+### [done] UI.1 Prevent the sticky report header from clipping section titles
 
 The reviewed 1440x960 Playwright report-summary and evidence artifacts show the
 repository and evidence titles sitting flush against the sticky report header;
@@ -231,6 +231,30 @@ Acceptance:
   heading bounding box touches the header boundary.
 - Saved desktop and mobile report-summary screenshots show no clipped title,
   horizontal overflow, or regression in the report controls.
+
+Validation:
+
+```bash
+npm run test:e2e
+npm run verify
+```
+
+### [ ] UI.2 Prevent the sticky report header from clipping section kickers
+
+Found while accepting UI.1 and kept separate per the `UI.n` rule. UI.1 fixed the
+`h1`/`h2` titles; the small uppercase kicker that sits above them
+(`.repository-label`, `.section-kicker`, `.dossier-section-title > div > span`)
+still lands on the sticky header boundary and is visibly half-cut in the
+desktop and mobile report-summary and evidence artifacts.
+
+Acceptance:
+
+- The kicker above each scrolled-to section title has visible clearance below
+  the sticky header at 1440x960 and 390x844.
+- The Playwright artifact check measures the kicker's glyph ink, not only the
+  title's.
+- Saved desktop and mobile artifacts show no clipped kicker and no regression
+  in title clearance or the report controls.
 
 Validation:
 

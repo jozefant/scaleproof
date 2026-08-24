@@ -45,10 +45,38 @@ async function saveViewportArtifact(
   await page.screenshot({ path: testInfo.outputPath(name) });
 }
 
+/** Minimum visible gap (px) between the sticky header and heading glyph ink. */
+const HEADING_CLEARANCE = 15;
+
+/**
+ * UI.1: measure the heading's *glyph ink* rather than its bounding box.
+ *
+ * These display headings set line-height below font-size, so the ascenders
+ * overflow the content box. A bounding box that merely touches the header
+ * boundary still renders clipped text, which is exactly the defect UI.1
+ * reports, so assert a real visible gap instead.
+ */
+async function headingInkClearance(
+  page: Page,
+  selector: string,
+): Promise<number> {
+  return page.evaluate((target) => {
+    const header = document.querySelector(".report-header");
+    const heading = document.querySelector(target);
+    if (!header || !heading) {
+      return Number.NaN;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    return range.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+  }, selector);
+}
+
 async function scrollHeadingBelowReportHeader(
   page: Page,
-  heading: ReturnType<Page["locator"]>,
+  selector: string,
 ): Promise<void> {
+  const heading = page.locator(selector);
   await heading.evaluate((element) => {
     element.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
   });
@@ -61,6 +89,9 @@ async function scrollHeadingBelowReportHeader(
   expect(headingBox).not.toBeNull();
   expect(headingBox?.y).toBeGreaterThanOrEqual(
     (headerBox?.y ?? 0) + (headerBox?.height ?? 0),
+  );
+  expect(await headingInkClearance(page, selector)).toBeGreaterThanOrEqual(
+    HEADING_CLEARANCE,
   );
 }
 
@@ -128,11 +159,23 @@ async function captureFounderFlowArtifacts(
   release?.();
   await expect(page.getByText("Technical readiness dossier")).toBeVisible();
 
-  await scrollHeadingBelowReportHeader(page, page.locator(".dossier-cover h1"));
+  // UI.1: at the top of the freshly loaded report the cover title must already
+  // clear the sticky header, before any scrolling puts scroll-margin-top into
+  // play.
+  await page.evaluate(() =>
+    // The page sets scroll-behavior: smooth; an animated scroll would be
+    // measured mid-flight.
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }),
+  );
+  expect(await headingInkClearance(page, ".dossier-cover h1")).toBeGreaterThanOrEqual(
+    HEADING_CLEARANCE,
+  );
+
+  await scrollHeadingBelowReportHeader(page, ".dossier-cover h1");
   await saveViewportArtifact(page, testInfo, `${viewport.name}-report-summary.png`);
-  await scrollHeadingBelowReportHeader(page, page.locator(".do-now h2"));
+  await scrollHeadingBelowReportHeader(page, ".do-now h2");
   await saveViewportArtifact(page, testInfo, `${viewport.name}-actions.png`);
-  await scrollHeadingBelowReportHeader(page, page.locator(".evidence-dossier h2"));
+  await scrollHeadingBelowReportHeader(page, ".evidence-dossier h2");
   await saveViewportArtifact(page, testInfo, `${viewport.name}-evidence.png`);
 }
 
