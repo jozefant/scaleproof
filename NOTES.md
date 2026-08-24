@@ -201,3 +201,47 @@ Critic concerns and what was done:
    `HEADING_CLEARANCE` raised to 15, re-run green.
 4. Untracked `e2e/growth-target-priority.spec.ts` seen mid-run: that is P0.6,
    in flight, not part of UI.1.
+
+## FINAL STATUS TABLE
+
+Run closed 2026-08-24 at the RUN.md turn cap. Final code change: `f1b5184`.
+
+### Tasks
+
+| Task | State | Commit | Critic | Evidence |
+| --- | --- | --- | --- | --- |
+| Coverage scoreboard (RUN.md step 2) | done | `5a9bf99` | n/a (harness) | `E2E line coverage of src/: 61.2%`, exit 0; below-gate path proven with `--threshold 99` -> exit 1 |
+| UI.1 sticky-header title clipping | **done** | `0520f15` | **PASS** | Critic measured ink clearance itself: 16.5-20.6px scrolled, 199.5/162.5px after load, both viewports. Reverting the CSS reproduces -2.5px. `npm run test:e2e` 13 passed |
+| P0.6 growth-target prioritization | **done** | `a79377b` | **PASS** (mutation) | Neutering `groupPriority` failed 2 of 3 new tests. Focused Vitest 15 passed; `npm run test:e2e` 13 passed |
+| P2.3 CLI packaging | **done** | `e860fc9` | **PASS** | Critic ran the built launcher from an empty directory: embedded-fixture acquisition succeeded, exit 1 on dummy key, stdout empty. 58 CLI tests; `npm pack --dry-run` shows launcher, bundle, README, LICENSE (+ unavoidable manifest) |
+| P1.0 static-frontend profile | **done** | `b89b1c7` | **PASS** (mutation) | Neutering `hasEmbeddedRuntimeConfiguration` failed 6 tests. Golden scenarios byte-identical. Two critic false-positive findings fixed, not deferred |
+| P1.1 browser-to-BaaS boundary | **done** | `f1b5184` | **PASS** (mutation) | Neutering `literalFreeExpression` failed the generic-error-logging negative. Detection regression found by the critic was fixed before commit: 21 positive / 13 negative query forms pinned |
+| P0.10 production vs test evidence | **NOT STARTED** | - | - | Ran out of turn budget. No work done, box not checked |
+| P0.9 external-provider evidence | **NOT STARTED** | - | - | Ran out of turn budget. No work done, box not checked |
+| D.3 Node 24 plan | plan written | this commit | n/a | `docs/node24-upgrade-plan.md`, no runtime change applied |
+
+### Checklist
+
+| # | Item | Result |
+| --- | --- | --- |
+| 1 | coverage >= 60.0, Playwright-only | **PASS** - 61.2%, exit 0 |
+| 2 | `npm run verify` exit 0 after final code change | **PASS** - exit 0, 293 tests |
+| 3 | seven tasks checked with validation output | **FAIL** - 5 of 7. P0.10 and P0.9 not started |
+| 4 | D.3 plan at `docs/node24-upgrade-plan.md` | **PASS** |
+| 5 | `npm pack --dry-run` from `cli/` | **PASS with caveat** - 5 files, `package.json` not excludable |
+| 6 | one commit per task, clean tree, no main commit, no push, no publish | **PASS** |
+| 7 | this table | **PASS** |
+
+### Tasks filed rather than folded into accepted work
+
+`UI.2` (section kickers still clip), `P0.11` (neutrality proven against one
+preference; `reuseExistingServer` could reuse a real-key dev server), `P1.2`
+(zero-applicable-weight domains score 0), `P1.3` (tenant-isolation summary
+wrong for a client-only tenant predicate).
+
+### Stop rule
+
+Stopped on the RUN.md turn cap, not on a stalled round - every round advanced a
+previously failing item. The last overrun was deliberate: committing P1.1 with
+its detection regression would have shipped a security control that silently
+stopped flagging `SELECT COUNT(*)` and escaped-newline SQL.
