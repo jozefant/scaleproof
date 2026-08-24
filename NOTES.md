@@ -202,9 +202,101 @@ Critic concerns and what was done:
 4. Untracked `e2e/growth-target-priority.spec.ts` seen mid-run: that is P0.6,
    in flight, not part of UI.1.
 
+## Round 4 — P0.10 and P0.9 (resumed run)
+
+Resumed on explicit user instruction to continue item 3, budget 10 turns per
+task. Both tasks contend on `controls/`, `SCORING.md` and `HEURISTIC_VERSION`,
+so they were serialized, builder then independent critic, as in earlier rounds.
+
+### P0.10 — commit `2fabc6b`
+
+Adds `src/lib/analysis/file-roles.ts`: a shared execution-context classifier
+(production / test / fixture / generated / documentation / tooling) plus
+`credentialScope`, `isProductionExecutionFile`, `productionExecutionFiles` and
+internal-only `evidenceRoles`.
+
+- A non-production credential match is **scoped, not suppressed**: it keeps its
+  safe evidence paths in the dossier and still earns zero credit against the
+  full weight-5 control (score impact identical to a fail), but cannot claim a
+  critical production secret or a mandatory `remove-exposed-secret` action.
+  Critic verified all four properties in code, not prose.
+- CI workflow definitions stay in production credential scope deliberately —
+  that is where real deployment credentials leak, and workflows are not in the
+  acceptance list.
+- Directories previously excluded from the scan entirely (`test/`, `fixtures/`,
+  `examples/`, `docs/`) are now scanned and reported as review signals, so this
+  is net more signal, not less.
+
+**Critic verdict: REJECT, then PASS after fix.** The builder had narrowed the
+pre-existing components dependency-direction guard in
+`src/lib/application/architecture.test.ts` so its new fixture paths (which
+contain the literal string `/components/` as data) would pass. Moving the guard
+from raw file text to extracted module specifiers is right, but the pattern's
+trailing `(?:\/|["'])` became dead once quotes were stripped, so a bare barrel
+import `@/lib/analysis` stopped being caught. Fixed to `(?:\/|$)` and
+mutation-checked both directions: injected barrel import fails, restored passes.
+Not exploitable today (no `src/lib/**/index.ts` barrels exist) but the guard's
+whole job is to stop a future refactor.
+
+Critic mutations that killed tests: `isProductionExecutionFile` forced false
+(3 fail), reachability dropped (4 fail), `credentialScope` forced
+non-production (14 fail) and forced production (11 fail), CI override deleted
+(3 fail). `npm run verify` exit 0, 417 tests.
+
+### P0.9 — commit `ba8fac9`
+
+Adds `src/lib/analysis/external-provider.ts`. Provider calls are detected by
+**shape** — four categorical signals — not by a vendor list; the only
+name-based logic is the narrowing exclusion of the project's own
+`@supabase/*` + `SUPABASE_*` data handle.
+
+**Critic verdict: REJECT, then ACCEPT after fix round.** Five of six items
+passed first review. Item 2 was over-tightened, and the critic produced
+HEAD-versus-working-tree measurements of genuine server-side enforcement now
+reporting as missing — precisely the failure mode item 2 exists to avoid:
+
+1. `security.validation` only recognised a bound parse when the schema variable
+   was *named* something like `schema`/`validator`/`body`. `const s =
+   z.object(...); s.parse(req.body)` went pass -> unknown. The builder's own
+   test table never used another spelling, so the fixture could not see it.
+2. `isReachableServerHandler` was `isProductionExecutionFile &&
+   isServerSurfaceFile`, and `isServerSurfaceFile` matches `middleware.ts` as a
+   *filename*, not a `middleware/` directory, and never matches `src/lib/`. A
+   permission check in `src/lib/authz.ts` or `src/middleware/auth.ts` — two of
+   the commonest Express layouts — went pass -> unknown.
+
+Fixes: a receiver-agnostic `bindsRequestParse` (receiver name is used only to
+*exclude* standard parsers), and server scope became a **call graph** —
+`importClosure` of server-surface roots — rather than a filename shape. The
+server-surface gate was moved, not deleted: "a surface must reach the file"
+still keeps browser-only code out. Dependency manifests are excluded from graph
+roots because `isServerSurfaceFile` matched `package.json` on `"express":`.
+
+Re-review measured against HEAD, not the builder's table: all four regressing
+forms restored to pass/enforced, and **six false passes that HEAD had are still
+killed** (bare `authorization` header, zod-declared-only, browser-only form
+validation with and without a server present, `JSON.parse(req.body)`, comment
+promising validation). Mutations: dropping the `bindsRequestParse` arm fails 3
+rows, reverting the call-graph scope fails exactly the helper and middleware
+rows, forcing `bindsRequestParse` true fails 11. `npm run verify` exit 0, 541
+tests.
+
+Breadth probe by the critic across frameworks the fixtures do not use —
+authorization passes for Spring, Django, Fastify, Firestore rules, Next.js
+route handlers, `@PreAuthorize`; validation passes for ajv, `@Valid`, pydantic.
+Gaps remain for Go, Ruby, Laravel, marshmallow and Rails strong parameters, but
+those are HEAD gaps, not regressions.
+
+Two precision weaknesses were accepted as smaller than HEAD's behaviour and
+filed instead of fixed: the receiver exclusion is a finite name list (seven
+non-validation parsers pass), and an `export *` barrel edge can pull a browser
+component into server-execution scope. Filed as `P0.12` and `P0.13`.
+
 ## FINAL STATUS TABLE
 
-Run closed 2026-08-24 at the RUN.md turn cap. Final code change: `f1b5184`.
+Run closed 2026-08-24. Final code change: `ba8fac9`. Rounds 0-3 stopped at
+the RUN.md turn cap with item 3 failing; the user then instructed the run to
+continue with the two remaining tasks at 10 turns each, which round 4 did.
 
 ### Tasks
 
@@ -216,17 +308,17 @@ Run closed 2026-08-24 at the RUN.md turn cap. Final code change: `f1b5184`.
 | P2.3 CLI packaging | **done** | `e860fc9` | **PASS** | Critic ran the built launcher from an empty directory: embedded-fixture acquisition succeeded, exit 1 on dummy key, stdout empty. 58 CLI tests; `npm pack --dry-run` shows launcher, bundle, README, LICENSE (+ unavoidable manifest) |
 | P1.0 static-frontend profile | **done** | `b89b1c7` | **PASS** (mutation) | Neutering `hasEmbeddedRuntimeConfiguration` failed 6 tests. Golden scenarios byte-identical. Two critic false-positive findings fixed, not deferred |
 | P1.1 browser-to-BaaS boundary | **done** | `f1b5184` | **PASS** (mutation) | Neutering `literalFreeExpression` failed the generic-error-logging negative. Detection regression found by the critic was fixed before commit: 21 positive / 13 negative query forms pinned |
-| P0.10 production vs test evidence | **NOT STARTED** | - | - | Ran out of turn budget. No work done, box not checked |
-| P0.9 external-provider evidence | **NOT STARTED** | - | - | Ran out of turn budget. No work done, box not checked |
+| P0.10 production vs test evidence | **done** | `2fabc6b` | **PASS** after one REJECT | Critic rejected a narrowed pre-existing dependency guard; fixed and mutation-checked. 5 critic mutations killed 3-14 tests each. `npm run verify` exit 0, 417 tests |
+| P0.9 external-provider evidence | **done** | `ba8fac9` | **PASS** after one REJECT | Critic measured two pass->unknown regressions in server-side enforcement against HEAD; fixed via receiver-agnostic parse binding and call-graph server scope. Re-review confirmed 4 forms restored, 6 HEAD false passes still killed. `npm run verify` exit 0, 541 tests |
 | D.3 Node 24 plan | plan written | this commit | n/a | `docs/node24-upgrade-plan.md`, no runtime change applied |
 
 ### Checklist
 
 | # | Item | Result |
 | --- | --- | --- |
-| 1 | coverage >= 60.0, Playwright-only | **PASS** - 61.2%, exit 0 |
-| 2 | `npm run verify` exit 0 after final code change | **PASS** - exit 0, 293 tests |
-| 3 | seven tasks checked with validation output | **FAIL** - 5 of 7. P0.10 and P0.9 not started |
+| 1 | coverage >= 60.0, Playwright-only | **PASS** - 65.0%, exit 0 |
+| 2 | `npm run verify` exit 0 after final code change | **PASS** - exit 0, 541 tests |
+| 3 | seven tasks checked with validation output | **PASS** - 7 of 7, each with focused output and an independent critic verdict |
 | 4 | D.3 plan at `docs/node24-upgrade-plan.md` | **PASS** |
 | 5 | `npm pack --dry-run` from `cli/` | **PASS with caveat** - 5 files, `package.json` not excludable |
 | 6 | one commit per task, clean tree, no main commit, no push, no publish | **PASS** |
@@ -234,14 +326,30 @@ Run closed 2026-08-24 at the RUN.md turn cap. Final code change: `f1b5184`.
 
 ### Tasks filed rather than folded into accepted work
 
-`UI.2` (section kickers still clip), `P0.11` (neutrality proven against one
-preference; `reuseExistingServer` could reuse a real-key dev server), `P1.2`
-(zero-applicable-weight domains score 0), `P1.3` (tenant-isolation summary
-wrong for a client-only tenant predicate).
+Rounds 0-3: `UI.2` (section kickers still clip), `P0.11` (neutrality proven
+against one preference; `reuseExistingServer` could reuse a real-key dev
+server), `P1.2` (zero-applicable-weight domains score 0), `P1.3`
+(tenant-isolation summary wrong for a client-only tenant predicate).
+
+Round 4: `P0.12` (validation parse bound to a receiver-name list), `P0.13`
+(`export *` barrel pulls browser code into server scope), `P0.14` (execution-role
+classification over-reach: generated banner, composite actions, `tools/`
+segment, `*.d.ts`), `P0.15` (comment stripping deletes `#`-prefixed private
+fields and truncates unquoted URLs), `P0.16` (four degenerate or mislabelled
+patterns, none a false pass today), `P1.4` (config-boundary role scope and
+non-production credential weight), `P1.5` (three provider-applicability
+judgements), `T.1` (the manifest-root exclusion is load-bearing but untested -
+removing it passes 408 of 408).
 
 ### Stop rule
 
-Stopped on the RUN.md turn cap, not on a stalled round - every round advanced a
-previously failing item. The last overrun was deliberate: committing P1.1 with
-its detection regression would have shipped a security control that silently
-stopped flagging `SELECT COUNT(*)` and escaped-newline SQL.
+Rounds 0-3 stopped on the RUN.md turn cap, not on a stalled round - every round
+advanced a previously failing item. That overrun was deliberate: committing P1.1
+with its detection regression would have shipped a security control that
+silently stopped flagging `SELECT COUNT(*)` and escaped-newline SQL.
+
+Round 4 ran only after the user explicitly reopened the run for the two
+remaining tasks. Both landed inside the 10-turn budget, each after one critic
+rejection that caught a real regression the builder's own green suite missed -
+in both cases because the builder's fixtures could not express the failing
+form.
