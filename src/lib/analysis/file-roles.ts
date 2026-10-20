@@ -79,7 +79,7 @@ const GENERATED_BANNER_WINDOW = 800;
  */
 const UI_PRIMITIVE_PATH = /(^|\/)components\/ui\/[^/]+\.[cm]?[jt]sx?$/i;
 const UI_PRIMITIVE_CONTENT =
-  /@radix-ui\/|class-variance-authority|\bshadcn\b|@headlessui\/|cmdk|vaul/i;
+  /@radix-ui\/|class-variance-authority|\bshadcn\b|@headlessui\/|\bcmdk\b|\bvaul\b/i;
 
 /* ---------------------------------------------------------------------- */
 /* Tests                                                                   */

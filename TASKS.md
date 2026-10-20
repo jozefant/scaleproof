@@ -357,6 +357,7 @@ request-path scope.
 4. `*.d.ts` classifies as `generated`. Accepted as defensible during P0.10
    review (a declaration file carries no executable logic and no runtime value),
    recorded here for a second opinion rather than left implicit.
+5. Raised by the PR #33 review. The same over-reach applies to more directory names: `GENERATED_DIRECTORY` matches `vendor/`, `target/` and `generated/`, `FIXTURE_DIRECTORY` matches `demo/`, `example/` and `sample/`, and `DOCUMENTATION_DIRECTORY` matches `docs/` and `wiki/`. `app/api/vendor/route.ts` therefore classifies `generated` and `app/docs/[slug]/page.tsx` classifies `documentation`. `DOCUMENTATION_FILE` matches every `.txt`, so a token in a `requirements.txt` index URL is downgraded from a critical production secret to a review signal.
 
 Acceptance:
 
@@ -381,6 +382,7 @@ damages content it should preserve:
    `endpoint: https:`. This reaches `evidenceState` guard files
    (`.yaml`, `.yml`, `.conf`). It fails safe - lost evidence becomes `unknown`
    rather than a false pass - but it does so silently.
+3. Raised by the PR #33 review. Every `'`, `"` and backtick opens a string, also in JSX text and in prose. One apostrophe (`<p>Don't have access</p>`) flips the quote state for the rest of the file. A later commented-out `// requireRole("admin")` then survives and credits `security.authorization` as enforced. This is a false pass, not a fail-safe loss.
 
 Acceptance:
 
@@ -416,9 +418,16 @@ after an unrelated edit.
    isServerSurfaceFile` shape, so a rate limiter living only in
    `src/lib/rate-limit.ts` is missed. The failure mode is a missed pass on an
    evidence-gap control, not a security downgrade.
+   The PR #33 review found concrete false passes that make this a security issue: the default `supabase/config.toml` has `[auth.rate_limit]`, which passes `security.provider-abuse-guard`. `.github/dependabot.yml` with `open-pull-requests-limit: 10` passes `security.provider-io-bounds`. Guard files need a role check and provider relevance.
 
 Acceptance: each pattern matches what its name claims, pinned by a negative
 test row; no P0.8 or P0.9 outcome changes.
+
+### [ ] P0.17 Make conventional server entry points execution roots
+
+Raised by the PR #33 review. A server-execution root must first pass `isProductionExecutionFile`, which needs reachability from `isSourceEntryPoint` in [`src/lib/analysis/file-roles.ts`](./src/lib/analysis/file-roles.ts). `isSourceEntryPoint` excludes `pages/api/` and does not know Express-style entries such as `src/app.ts` or `src/server.ts`. A pages-router `pages/api/admin.ts` that calls `requireRole(` and an LLM provider is unreachable. `security.authorization` then reports missing enforcement, and the provider controls become `not_applicable`.
+
+Acceptance: `pages/api/**` and the common Node server entry files are roots, pinned by synthetic fixtures; the P0.9 and P0.10 acceptance matrices still hold.
 
 ### [ ] P1.4 Role-scope the configuration boundary and calibrate the non-production credential signal
 
@@ -659,6 +668,12 @@ Acceptance:
 - No repository identifier, path, source, contributor identity, or secret
   appears in logs or metrics.
 - Deployment happens only after explicit user authorization.
+
+### [ ] D.4 Unwrap Markdown prose across the repository
+
+Raised by the PR #33 review. The workspace documentation rule forbids hard-wrapped prose, but every Markdown file in this repository wraps paragraphs at about 80 columns. Unwrap all of them in one mechanical commit, so the diff contains no content change. Keep line breaks in lists, tables, headings and code blocks.
+
+Acceptance: no prose paragraph spans more than one line; `git diff --word-diff` shows no word changes.
 
 ### [ ] D.3 Plan and de-risk the Node.js 24 upgrade
 

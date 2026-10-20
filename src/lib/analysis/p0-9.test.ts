@@ -938,3 +938,27 @@ describe("P0.9 stack and reachability diagnostics", () => {
     expect(surface.publicObject).toBe(true);
   });
 });
+
+describe("shared edge-function module names", () => {
+  it("does not abort the scan for a shared module name with regular-expression characters", () => {
+    const files = [
+      ...EXPOSED_PROVIDER_FILES,
+      { path: "supabase/functions/_shared/cors(v2.ts", content: "export const x = 1;\n" },
+    ];
+    expect(() => analyze(files)).not.toThrow();
+  });
+
+  it("matches a dot in a shared module name as a literal dot", () => {
+    const files = EXPOSED_PROVIDER_FILES.map((file) =>
+      file.path === "supabase/functions/_shared/cors.ts"
+        ? { ...file, path: "supabase/functions/_shared/cors.v2.ts" }
+        : file.path === "supabase/functions/voice-note/index.ts"
+          ? { ...file, content: file.content.replace(/_shared\/cors(\.ts)?/, "_shared/corsXv2.ts") }
+          : file,
+    );
+    const [boundary] = edgeFunctionBoundaries(createRepositoryIndex(p0_9Snapshot(files)));
+    expect(boundary?.files.map((file) => file.path)).toEqual([
+      "supabase/functions/voice-note/index.ts",
+    ]);
+  });
+});

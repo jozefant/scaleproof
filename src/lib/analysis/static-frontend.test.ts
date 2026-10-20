@@ -171,6 +171,13 @@ describe("static frontend evidence profile", () => {
     });
   });
 
+  it("does not call a partial scan static, because unread files may hold a server", () => {
+    const partial = snapshot(STATIC_LANDING_PAGE);
+    partial.coverage = { ...partial.coverage, partial: true };
+
+    expect(staticFrontendProfile(createRepositoryIndex(partial)).staticOnly).toBe(false);
+  });
+
   it("does not fail runtime-configuration or database and external-work controls for a static landing page", () => {
     const checks = checksFor(STATIC_LANDING_PAGE);
 

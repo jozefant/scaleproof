@@ -12,7 +12,7 @@ modules) and there are fewer than ten items.
 First, in the terminal (not in Claude):
 
 ```bash
-cd /Users/antony/openaibuildweek
+cd <path-to-your-scaleproof-clone>
 git checkout -b run/tasks-2026-08-24
 ```
 

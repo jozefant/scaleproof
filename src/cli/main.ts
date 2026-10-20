@@ -18,6 +18,9 @@
  * repository name, file paths, source text, contributor data, or credentials.
  */
 
+import { constants as fsConstants } from "node:fs";
+import { access } from "node:fs/promises";
+import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { analyzeRepository } from "@/lib/application/analyze-repository";
@@ -104,9 +107,16 @@ export interface CliDependencies {
     onSynthesisRetry?: SynthesisRetryHandler,
     diagnostics?: ExternalServiceDiagnostics,
   ) => Promise<AnalysisReport>;
+  /**
+   * Throws `CliUsageError` when the report cannot be written to the path. It
+   * runs before acquisition so that a bad path does not spend a paid scan.
+   */
+  checkOutputPath: (filePath: string) => Promise<void>;
   /** Only ever called with a complete, schema-valid report. */
   writeReportFile: (filePath: string, contents: string) => Promise<void>;
 }
+
+class ReportWriteError extends Error {}
 
 // A caller mistake or a missing prerequisite is reported on stderr with
 // `EXIT_USAGE`. It is re-exported so the command surface stays one import.
@@ -136,7 +146,8 @@ Usage:
 Input (exactly one is required):
   <url>                     One public GitHub repository root URL.
   --demo                    Analyze the synthetic demo repository that is
-                            embedded in this command. Needs no network access.
+                            embedded in this command. Downloads no repository,
+                            but prioritization still calls OpenAI.
 
 Options:
   --stage <value>              prototype | live_early | scaling_production |
@@ -337,6 +348,15 @@ function defaultDependencies(): CliDependencies {
         onSynthesisRetry,
         diagnostics,
       }),
+    checkOutputPath: async (filePath) => {
+      try {
+        await access(path.dirname(path.resolve(filePath)), fsConstants.W_OK);
+      } catch {
+        throw new CliUsageError(
+          "The --output directory does not exist or is not writable.",
+        );
+      }
+    },
     writeReportFile: async (filePath, contents) => {
       const { writeFile } = await import("node:fs/promises");
       await writeFile(filePath, contents, "utf8");
@@ -392,6 +412,17 @@ export async function runCli(
     return EXIT_USAGE;
   }
 
+  if (invocation.outputPath) {
+    try {
+      await dependencies.checkOutputPath(invocation.outputPath);
+    } catch (error) {
+      stderr(
+        `scaleproof: ${error instanceof CliUsageError ? error.message : "The --output path is not usable."}\n`,
+      );
+      return EXIT_USAGE;
+    }
+  }
+
   if (signal?.aborted) {
     progress("cancelled before the scan started");
     return EXIT_CANCELLED;
@@ -440,7 +471,11 @@ export async function runCli(
         : `${renderMarkdownReport(report)}\n`;
 
     if (invocation.outputPath) {
-      await dependencies.writeReportFile(invocation.outputPath, rendered);
+      await dependencies
+        .writeReportFile(invocation.outputPath, rendered)
+        .catch(() => {
+          throw new ReportWriteError();
+        });
       progress("report written to the requested output file");
     } else {
       stdout(rendered);
@@ -460,6 +495,12 @@ export async function runCli(
       // Acquisition messages are fixed, privacy-safe strings.
       stderr(`scaleproof: ${error.message}\n`);
       return error.code === "invalid_url" ? EXIT_USAGE : EXIT_FAILURE;
+    }
+    if (error instanceof ReportWriteError) {
+      stderr(
+        "scaleproof: the report was complete but could not be written to the --output file.\n",
+      );
+      return EXIT_FAILURE;
     }
     if (error instanceof MandatorySynthesisError) {
       stderr(`scaleproof: ${error.message}\n`);

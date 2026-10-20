@@ -155,6 +155,7 @@ async function runSyntheticScan(
           });
         },
       }),
+    checkOutputPath: async () => {},
     writeReportFile: async (filePath, contents) => {
       run.written.push({ filePath, contents });
     },

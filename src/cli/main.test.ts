@@ -9,6 +9,10 @@
  * acquired, no OpenAI request is made, and no real API key is used.
  */
 
+import { randomUUID } from "node:crypto";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -19,6 +23,7 @@ import {
   EXIT_USAGE,
   parseCliArguments,
   runCli,
+  USAGE,
   type CliDependencies,
 } from "@/cli/main";
 import { MandatorySynthesisError } from "@/lib/ai/synthesis";
@@ -131,6 +136,7 @@ function harness(overrides: Partial<CliDependencies> = {}): Harness {
     acquireDemo: async () => syntheticSnapshot(),
     acquirePublic: async () => syntheticSnapshot(),
     analyze: async () => syntheticReport(),
+    checkOutputPath: async () => {},
     writeReportFile: async (filePath, contents) => {
       state.written.push({ filePath, contents });
     },
@@ -312,6 +318,52 @@ describe("CLI command contract", () => {
     expect(state.written).toHaveLength(1);
     expect(state.written[0]?.filePath).toBe("report.md");
     expect(state.written[0]?.contents).toContain("# Scaleproof report:");
+  });
+
+  it("rejects an unusable --output path before acquisition or synthesis", async () => {
+    let acquired = false;
+    let analyzed = false;
+    const state = harness({
+      acquireDemo: async () => {
+        acquired = true;
+        return syntheticSnapshot();
+      },
+      analyze: async () => {
+        analyzed = true;
+        return syntheticReport();
+      },
+    });
+    // The real path check runs here, not the harness stub.
+    delete state.dependencies.checkOutputPath;
+    const missingDirectory = path.join(os.tmpdir(), `scaleproof-missing-${randomUUID()}`);
+    const code = await runCli(
+      ["--demo", "--output", path.join(missingDirectory, "report.md")],
+      state.dependencies,
+    );
+    expect(code).toBe(EXIT_USAGE);
+    expect(acquired).toBe(false);
+    expect(analyzed).toBe(false);
+    expect(state.stderr).toContain("--output directory does not exist");
+    expect(state.stderr).not.toContain(missingDirectory);
+  });
+
+  it("names the --output write as the failure when a complete report cannot be written", async () => {
+    const state = harness({
+      writeReportFile: async () => {
+        throw new Error("EACCES: /private/report.md");
+      },
+    });
+    const code = await runCli(
+      ["--demo", "--output", "report.md"],
+      state.dependencies,
+    );
+    expect(code).toBe(EXIT_FAILURE);
+    expect(state.stderr).toContain("could not be written to the --output file");
+    expect(state.stderr).not.toContain("/private");
+  });
+
+  it("does not promise an offline demo, because prioritization calls OpenAI", () => {
+    expect(USAGE).not.toMatch(/no network/i);
   });
 
   it("reports invalid arguments on stderr with exit 2 and no stdout", async () => {

@@ -230,7 +230,9 @@ export function staticFrontendProfile(
     persistenceClient,
     outboundData,
     submissionPath,
+    // A partial scan cannot prove that no server code exists.
     staticOnly:
+      !index.snapshot.coverage.partial &&
       browserBundle &&
       !serverSurface &&
       !persistenceClient &&

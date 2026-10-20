@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.10-hackathon`
+Version: `0.8.11-hackathon`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -356,6 +356,7 @@ work the product does not contain, so a repository is classified as a
    outbound data write, and never evidence that a backend exists. `action`,
    `method`, and form-service attributes count only when they sit on a form
    element, not when the same words appear elsewhere in the file.
+6. The scan is complete. A partial scan did not read every file, so it cannot prove that no server code exists.
 
 Any one of conditions 2 to 5 removes the repository from the profile. A client
 application that calls a real API, Supabase, storage, authentication, or

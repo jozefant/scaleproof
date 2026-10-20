@@ -177,7 +177,11 @@ function parseTolerantJson(content: string): unknown {
 }
 
 function typeScriptAliases(index: RepositoryIndex): SourceAlias[] {
-  const config = index.files.find((file) => /(^|\/)(?:tsconfig|jsconfig)(?:\.[\w-]+)?\.json$/i.test(file.normalizedPath));
+  // Variants such as `tsconfig.build.json` usually extend the base file and
+  // omit `paths`, so the base file has priority.
+  const config =
+    index.files.find((file) => /(^|\/)(?:tsconfig|jsconfig)\.json$/i.test(file.normalizedPath)) ??
+    index.files.find((file) => /(^|\/)(?:tsconfig|jsconfig)\.[\w-]+\.json$/i.test(file.normalizedPath));
   if (!config) return [];
   const parsed = parseTolerantJson(config.content) as {
     compilerOptions?: { baseUrl?: unknown; paths?: Record<string, unknown> };

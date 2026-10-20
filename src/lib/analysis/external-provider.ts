@@ -345,7 +345,7 @@ export function edgeFunctionBoundaries(
     const usedShared = shared.filter((file) => {
       const name = file.normalizedPath.split("/").pop() ?? "";
       const base = name.replace(/\.[cm]?[jt]sx?$/i, "");
-      return base.length > 0 && new RegExp(`_shared/${base}(?:\\.[cm]?[jt]sx?)?["'\`]`).test(ownContent);
+      return base.length > 0 && new RegExp(`_shared/${escapedPattern(base)}(?:\\.[cm]?[jt]sx?)?["'\`]`).test(ownContent);
     });
     const files = [entry, ...siblings, ...usedShared];
     const joined = files.map((file) => file.content).join("\n");

@@ -232,6 +232,21 @@ describe("execution-context file roles", () => {
     expect(NON_PRODUCTION_FILE_ROLES.has("production")).toBe(false);
   });
 
+  it("needs a whole generator package name to call a UI primitive generated", () => {
+    expect(
+      classifyFileRole(
+        "src/components/ui/vault-panel.tsx",
+        'export const title = "Vault";\n',
+      ),
+    ).toBe("production");
+    expect(
+      classifyFileRole(
+        "src/components/ui/command.tsx",
+        'import { Command } from "cmdk";\n',
+      ),
+    ).toBe("generated");
+  });
+
   it("classifies from the path alone when no content is available", () => {
     expect(classifyFileRole("src/orders.test.ts")).toBe("test");
     expect(classifyFileRole("node_modules/react/index.js")).toBe("generated");
