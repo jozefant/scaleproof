@@ -242,10 +242,10 @@ describe("P0.8 scanner evidence hardening", () => {
 
     const unreachable = evaluateControls(snapshot([
       { path: "src/main.ts", content: "export const app = true;" },
-      { path: "src/features/orphan.ts", content: "const session = new Map(); const schema = zod.object({});" },
+      { path: "src/features/orphan.ts", content: "const session = new Map(); const csp = 'content-security-policy';" },
     ]), CONTEXT);
     expect(unreachable.find((candidate) => candidate.id === "saas.stateless-tier")).toMatchObject({ outcome: "unknown" });
-    expect(unreachable.find((candidate) => candidate.id === "security.validation")).toMatchObject({ outcome: "unknown", evidenceTier: "absent" });
+    expect(unreachable.find((candidate) => candidate.id === "security.web-baseline")).toMatchObject({ outcome: "unknown", evidenceTier: "absent" });
 
     const dependencyOnly = check([
       { path: "tests/example.test.ts", content: "it('works', () => {});" },
@@ -267,41 +267,45 @@ describe("P0.8 scanner evidence hardening", () => {
     expect(ciWired).toMatchObject({ outcome: "pass", evidenceTier: "enforced" });
   });
 
+  // `security.web-baseline` is the reachability probe here. It used to be
+  // `security.validation`, which P0.9 rebound to a schema parse inside a
+  // reachable *server handler*; the subject of these cases is which files are
+  // reachable, not where validation runs.
   it("resolves configured aliases and excludes orphaned Next App Router files", () => {
     const aliasReachable = evaluateControls(snapshot([
       { path: "tsconfig.json", content: '{ "compilerOptions": { "paths": { "@/*": ["src/*"] } } }' },
-      { path: "src/main.ts", content: 'import { schema } from "@/features/live"; export { schema };' },
-      { path: "src/features/live.ts", content: "export const schema = zod.object({ name: zod.string() });" },
+      { path: "src/main.ts", content: 'import { csp } from "@/features/live"; export { csp };' },
+      { path: "src/features/live.ts", content: "export const csp = 'content-security-policy';" },
     ]), CONTEXT);
-    expect(aliasReachable.find((candidate) => candidate.id === "security.validation")).toMatchObject({
+    expect(aliasReachable.find((candidate) => candidate.id === "security.web-baseline")).toMatchObject({
       outcome: "pass",
       evidenceTier: "enforced",
     });
 
     const appRouter = evaluateControls(snapshot([
       { path: "src/main.ts", content: "export const app = true;" },
-      { path: "src/app/features/orphan.tsx", content: "const session = new Map(); const schema = zod.object({});" },
-      { path: "src/app/page.tsx", content: "const schema = zod.object({}); export default function Page() { return null; }" },
+      { path: "src/app/features/orphan.tsx", content: "const session = new Map(); const csp = 'content-security-policy';" },
+      { path: "src/app/page.tsx", content: "const csp = 'content-security-policy'; export default function Page() { return null; }" },
     ]), CONTEXT);
     expect(appRouter.find((candidate) => candidate.id === "saas.stateless-tier")).toMatchObject({ outcome: "unknown" });
-    expect(appRouter.find((candidate) => candidate.id === "security.validation")).toMatchObject({
+    expect(appRouter.find((candidate) => candidate.id === "security.web-baseline")).toMatchObject({
       outcome: "pass",
       evidenceTier: "enforced",
     });
 
     const nestedIndex = evaluateControls(snapshot([
       { path: "src/main.ts", content: "export const app = true;" },
-      { path: "src/features/orphan/index.ts", content: "const schema = zod.object({});" },
+      { path: "src/features/orphan/index.ts", content: "const csp = 'content-security-policy';" },
     ]), CONTEXT);
-    expect(nestedIndex.find((candidate) => candidate.id === "security.validation")).toMatchObject({
+    expect(nestedIndex.find((candidate) => candidate.id === "security.web-baseline")).toMatchObject({
       outcome: "unknown",
       evidenceTier: "absent",
     });
 
     const incompleteSnapshot = snapshot([
       { path: "src/main.ts", content: "import './missing'; export const app = true;" },
-      { path: "src/features/live.ts", content: "export const schema = zod.object({});" },
-      { path: "src/features/orphan.ts", content: "const session = new Map(); const schema = zod.object({});" },
+      { path: "src/features/live.ts", content: "export const csp = 'content-security-policy';" },
+      { path: "src/features/orphan.ts", content: "const session = new Map(); const csp = 'content-security-policy';" },
     ]);
     const incomplete = evaluateControls(incompleteSnapshot, CONTEXT);
     expect(hasIncompleteSourceReachability(createRepositoryIndex(incompleteSnapshot))).toBe(true);
@@ -309,7 +313,7 @@ describe("P0.8 scanner evidence hardening", () => {
       outcome: "unknown",
       evidenceTier: "runtime_only",
     });
-    expect(incomplete.find((candidate) => candidate.id === "security.validation")).toMatchObject({
+    expect(incomplete.find((candidate) => candidate.id === "security.web-baseline")).toMatchObject({
       outcome: "unknown",
       evidenceTier: "absent",
     });

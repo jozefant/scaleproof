@@ -1,4 +1,12 @@
 import * as signals from "../signals";
+import {
+  dataClientOperations,
+  hasRealDataQuery,
+  hasUnboundedDataQuery,
+} from "../browser-data-boundary";
+import { providerSurface } from "../external-provider";
+import { isProductionExecutionFile } from "../file-roles";
+import { isStaticFrontendOnly } from "../static-frontend";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
 
@@ -27,15 +35,180 @@ const CLIENT_PATTERNS = [
 const TIMEOUT_PATTERNS = [
   /\b(abortsignal\.timeout|setconnecttimeout|setreadtimeout|connecttimeout|readtimeout)\b|timeout\s*:/i,
 ];
+/**
+ * A recognized client token is only an external dependency when it is not a
+ * method on a persistence handle. `userRepository.fetch(id)` and `db.fetch(id)`
+ * are database service calls: they are not evidence of an outbound network
+ * dependency, and they must not create a slow-work or failure-safety finding.
+ */
+const EXTERNAL_CLIENT_CALL = new RegExp(
+  CLIENT_PATTERNS.map((pattern) => pattern.source).join("|"),
+  "gi",
+);
+const PERSISTENCE_HANDLE_PREFIX =
+  /(?:repository|repositories|repo|entitymanager|jdbctemplate|datasource|prisma|knex|sequelize|mongoose|typeorm|supabase|firestore|dao|querybuilder|queryrunner|db|database|collection|session|store)\s*\.\s*$/i;
+
+function hasExternalClientCall(content: string): boolean {
+  for (const match of content.matchAll(EXTERNAL_CLIENT_CALL)) {
+    const start = match.index ?? 0;
+    const before = content.slice(Math.max(0, start - 60), start);
+    if (PERSISTENCE_HANDLE_PREFIX.test(before)) continue;
+    return true;
+  }
+  return false;
+}
+
 const RETRY_SAFETY_PATTERNS = [
   /\b(idempotency[-_ ]?key|idempotent|retry.{0,80}(backoff|exponential)|@retryable.{0,80}backoff|circuit.?breaker|bulkhead|backpressure)\b/is,
 ];
+
+// Embedded runtime configuration. A URL literal is only a configuration
+// boundary finding when the surrounding source uses it as a deployment
+// endpoint, a client or service initializer, or a named runtime setting.
+// Ordinary content links, images, media, fonts, and documentation URLs are
+// static content, not deploy-time configuration.
+const URL_LITERAL = /https?:\/\/[^\s"'`<>()]+/gi;
+const CONNECTION_STRING =
+  /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|rediss|amqps?|wss?|jdbc:[a-z]+):\/\/[^\s"'`]+/i;
+const CREDENTIAL_ASSIGNMENT =
+  /\b(password|api[_-]?key|secret|access[_-]?token|service[_-]?role)\s*[:=]\s*["'][^"']{8,}/i;
+const STATIC_ASSET_URL =
+  /\.(?:png|jpe?g|gif|webp|avif|svg|ico|bmp|mp4|webm|ogv|ogg|mp3|wav|pdf|woff2?|ttf|otf|eot|css|scss|md|txt|zip)(?:[?#][^\s"'`]*)?$/i;
+const STATIC_CONTENT_CONTEXT =
+  /(?:\b(?:src|srcset|href|poster|content|cite|action|data-src|background|imagesrcset)\s*=\s*["'{]?|\burl\s*\(\s*["']?|@import\s+["']?)$/i;
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|#|<!--)/;
+const RUNTIME_CALL_CONTEXT =
+  /\b(?:fetch|axios(?:\.[a-z]+)?|got|ky|superagent|request|httpclient|resttemplate|webclient|requests\.[a-z]+|urlopen|createclient|createconnection|createpool|initializeapp|connect|new\s+[\w$]*(?:client|pool|connection|api|sdk|socket|eventsource|server|database|db))\s*\(\s*(?:[\w$]+\s*,\s*)?(?:\{[\s\S]{0,160})?$/i;
+const CONFIGURATION_BINDING = /(?:^|[^\w$.])([A-Za-z_$][\w$]*)\s*[:=]\s*$/;
+const RUNTIME_CONFIGURATION_TOKENS = new Set([
+  "api",
+  "apis",
+  "endpoint",
+  "endpoints",
+  "backend",
+  "server",
+  "gateway",
+  "database",
+  "db",
+  "datasource",
+  "redis",
+  "broker",
+  "queue",
+  "supabase",
+  "firebase",
+  "graphql",
+  "websocket",
+  "socket",
+  "webhook",
+  "webhooks",
+  "auth",
+  "proxy",
+  "origin",
+  "connection",
+  "connectionstring",
+  "baseurl",
+  "host",
+]);
+const STATIC_CONTENT_TOKENS = new Set([
+  "image",
+  "images",
+  "img",
+  "photo",
+  "photos",
+  "picture",
+  "logo",
+  "icon",
+  "avatar",
+  "banner",
+  "thumbnail",
+  "thumb",
+  "cover",
+  "background",
+  "hero",
+  "video",
+  "audio",
+  "media",
+  "font",
+  "fonts",
+  "href",
+  "link",
+  "links",
+  "doc",
+  "docs",
+  "documentation",
+  "blog",
+  "article",
+  "social",
+  "profile",
+  "download",
+  "asset",
+  "assets",
+  "poster",
+  "gallery",
+  "screenshot",
+  "favicon",
+  "map",
+  "maps",
+  "cdn",
+  "static",
+  "public",
+  "upload",
+  "uploads",
+]);
+
+function identifierTokens(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .map((token) => token.toLowerCase())
+    .filter(Boolean);
+}
+
+function isRuntimeConfigurationName(name: string): boolean {
+  const tokens = identifierTokens(name);
+  if (tokens.some((token) => STATIC_CONTENT_TOKENS.has(token))) return false;
+  if (tokens.some((token) => RUNTIME_CONFIGURATION_TOKENS.has(token))) return true;
+  return (
+    tokens.includes("base") && (tokens.includes("url") || tokens.includes("uri"))
+  );
+}
+
+/**
+ * Returns true when the file embeds a value used as runtime configuration,
+ * client or service initialization, a credential, a deployment endpoint, or a
+ * capacity setting. Ordinary content, asset, media, font, and documentation
+ * URLs are excluded.
+ */
+function hasEmbeddedRuntimeConfiguration(content: string): boolean {
+  if (CREDENTIAL_ASSIGNMENT.test(content)) return true;
+  if (CONNECTION_STRING.test(content)) return true;
+
+  for (const match of content.matchAll(URL_LITERAL)) {
+    const value = match[0];
+    const start = match.index ?? 0;
+    if (/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|example\.com)/i.test(value)) {
+      continue;
+    }
+    if (STATIC_ASSET_URL.test(value)) continue;
+    const before = content.slice(Math.max(0, start - 100), start);
+    if (COMMENT_LINE.test(before.slice(before.lastIndexOf("\n") + 1))) continue;
+    const preceding = before.replace(/["'`\s]+$/, "");
+    if (STATIC_CONTENT_CONTEXT.test(before) || STATIC_CONTENT_CONTEXT.test(preceding)) {
+      continue;
+    }
+    if (RUNTIME_CALL_CONTEXT.test(preceding)) return true;
+    const binding = CONFIGURATION_BINDING.exec(preceding);
+    if (binding?.[1] && isRuntimeConfigurationName(binding[1])) return true;
+  }
+  return false;
+}
 
 export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.stateless-tier",
     claim: "A SaaS request tier does not keep user or job state in one process.",
-    applicability: "Repositories exposing a long-running web service.",
+    applicability:
+      "Repositories exposing a long-running web service. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["External session store or direct process-local state evidence"],
     disqualifyingSignals: ["Generic scalability wording"],
     strongestEvidenceTier: "inferred",
@@ -45,9 +218,13 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.database-discipline",
     claim: "Database-backed request paths show bounded-query and schema-index foundations.",
-    applicability: "Repositories with durable-data signals.",
+    applicability:
+      "Reachable production source in repositories with durable-data signals. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Pagination or query-limit signal and migration/index evidence"],
-    disqualifyingSignals: ["Database dependency alone"],
+    disqualifyingSignals: [
+      "Database dependency alone",
+      "Unbounded or N+1 patterns that appear only in test, fixture, generated, migration, or offline-script files",
+    ],
     strongestEvidenceTier: "inferred",
     confidenceLimitation: "Static patterns cannot prove query plans, cardinality, or production contention.",
     remediationCode: "add-load-path",
@@ -55,9 +232,14 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.slow-work",
     claim: "Potentially slow external work is separated from synchronous request handling.",
-    applicability: "Repositories with detected HTTP, mail, report, or file-generation work.",
+    applicability:
+      "Reachable production request handlers with detected HTTP, mail, report, or file-generation work. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Queue, worker, scheduler, or explicit asynchronous boundary"],
-    disqualifyingSignals: ["Async syntax alone"],
+    disqualifyingSignals: [
+      "Async syntax alone",
+      "External-client calls that appear only in test, fixture, generated, migration, or offline-script files",
+      "A client token that is a method on a persistence handle, which is a database service call rather than an external dependency",
+    ],
     strongestEvidenceTier: "inferred",
     confidenceLimitation: "A repository cannot prove runtime latency or that every slow path is decoupled.",
     remediationCode: "add-failure-controls",
@@ -65,9 +247,14 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.failure-safety",
     claim: "External SaaS work has timeouts and retry or idempotency safety.",
-    applicability: "Repositories making external calls or processing webhooks or payments.",
+    applicability:
+      "Reachable production source making external calls or processing webhooks or payments. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Configured timeout and retry, idempotency, or overload control"],
-    disqualifyingSignals: ["One unconfigured client call or generic reliability prose"],
+    disqualifyingSignals: [
+      "One unconfigured client call or generic reliability prose",
+      "External-client calls that appear only in test, fixture, generated, migration, or offline-script files",
+      "A client token that is a method on a persistence handle, which is a database service call rather than an external dependency",
+    ],
     strongestEvidenceTier: "enforced",
     confidenceLimitation: "Configuration cannot prove values are tuned or failure paths are exercised.",
     remediationCode: "add-failure-controls",
@@ -75,9 +262,16 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.config-boundary",
     claim: "Runtime endpoints, secrets, and capacity configuration are not embedded in source.",
-    applicability: "Repositories with deployable application code.",
-    requiredSignals: ["Environment-owned configuration and explicit pool or capacity setting"],
-    disqualifyingSignals: ["Documentation examples and test fixtures"],
+    applicability:
+      "Repositories with deployable application code and a deploy-time configuration surface; not applicable to a static frontend with no embedded runtime value.",
+    requiredSignals: [
+      "Environment-owned configuration and explicit pool or capacity setting",
+      "A value used as runtime configuration, client or service initialization, a credential, a deployment endpoint, or a capacity setting",
+    ],
+    disqualifyingSignals: [
+      "Documentation examples and test fixtures",
+      "Content, image, media, font, or documentation URLs and ordinary hyperlinks",
+    ],
     strongestEvidenceTier: "enforced",
     confidenceLimitation: "Static inspection cannot establish the production secret manager or final deployment values.",
     remediationCode: "add-security-baseline",
@@ -85,7 +279,8 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.tenant-isolation",
     claim: "Detected tenant-owned data has a centrally visible isolation boundary.",
-    applicability: "Repositories with tenant, organization, workspace, or account-scoped data signals.",
+    applicability:
+      "Repositories with tenant, organization, workspace, or account-scoped data signals. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["RLS, ORM filter, tenant base repository, or central middleware evidence"],
     disqualifyingSignals: ["A tenant field or hand-written query alone"],
     strongestEvidenceTier: "enforced",
@@ -95,7 +290,8 @@ export const saasAuditDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "saas.observability",
     claim: "A SaaS service exposes metrics and correlation evidence beyond console logging.",
-    applicability: "Long-running services intended for operated deployment.",
+    applicability:
+      "Long-running services intended for operated deployment. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Metrics or tracing signal and correlation propagation or structured logging"],
     disqualifyingSignals: ["Console logging or one health endpoint"],
     strongestEvidenceTier: "enforced",
@@ -172,18 +368,40 @@ function sourceContent(index: Parameters<ControlEvaluator>[0], patterns: RegExp[
   });
 }
 
+/**
+ * Request-path evidence. A finding about what happens while a user waits may
+ * only be drawn from a reachable production handler, never from a test, a
+ * fixture, a generated artifact, a migration, or an offline script.
+ */
 function requestContent(index: Parameters<ControlEvaluator>[0], patterns: RegExp[]) {
   return signals.findContent(index, patterns, {
     pathPatterns: REQUEST_PATHS,
     excludePathPatterns: [TEST_OR_FIXTURE_PATH],
+    matchesFile: (file) => isProductionExecutionFile(index, file),
   });
 }
 
+function requestContentMatching(
+  index: Parameters<ControlEvaluator>[0],
+  matchesContent: (content: string) => boolean,
+) {
+  return signals.findContentMatching(index, matchesContent, {
+    pathPatterns: REQUEST_PATHS,
+    excludePathPatterns: [TEST_OR_FIXTURE_PATH],
+    matchesFile: (file) => isProductionExecutionFile(index, file),
+  });
+}
+
+/**
+ * The reachable production call graph, restricted to the languages whose
+ * static patterns this lens has reviewed. Test, fixture, generated, offline
+ * tooling, and documentation files are excluded: they are real evidence about
+ * the repository, but not about production execution.
+ */
 function sourceFiles(index: Parameters<ControlEvaluator>[0]) {
   return index.files.filter(
     (file) =>
-      signals.isImplementationEvidencePath(file.path) &&
-      signals.isReachableImplementationEvidenceFile(index, file) &&
+      isProductionExecutionFile(index, file) &&
       SOURCE_PATHS.some((pattern) => pattern.test(file.normalizedPath)) &&
       !TEST_OR_FIXTURE_PATH.test(file.normalizedPath),
   );
@@ -191,16 +409,6 @@ function sourceFiles(index: Parameters<ControlEvaluator>[0]) {
 
 function references(files: ReturnType<typeof sourceFiles>) {
   return files.slice(0, 4).map((file) => ({ path: file.path, kind: "code" as const }));
-}
-
-function hasUnboundedSql(content: string): boolean {
-  return content
-    .split(";")
-    .some(
-      (statement) =>
-        /\bselect\b/i.test(statement) &&
-        !/\b(limit|fetch\s+first|top\s*\()\b/i.test(statement),
-    );
 }
 
 function clientKinds(content: string): string[] {
@@ -255,6 +463,40 @@ function axiosInstanceObservations(
     });
   }
   return instances;
+}
+
+/**
+ * Recognized external-provider calls inside Supabase Edge Functions.
+ *
+ * These are request-path external calls that the generic client patterns miss:
+ * a provider SDK imported with `npm:` never writes `fetch(`. Without them, a
+ * function that calls a paid provider with no timeout, no input bound, and no
+ * abuse guard would be classified as *not applicable* rather than assessed.
+ */
+function edgeProviderEvidence(index: Parameters<ControlEvaluator>[0]) {
+  return providerSurface(index)
+    .edgeFunctions.filter((boundary) => boundary.providerCall)
+    .flatMap((boundary) => boundary.providerEvidence);
+}
+
+function edgeProviderObservations(
+  index: Parameters<ControlEvaluator>[0],
+): ClientObservation[] {
+  const byPath = new Map(index.files.map((file) => [file.normalizedPath, file]));
+  return providerSurface(index)
+    .edgeFunctions.filter((boundary) => boundary.providerCall)
+    .flatMap((boundary) =>
+      boundary.providerEvidence.flatMap((evidence) => {
+        const file = byPath.get(evidence.path.toLowerCase());
+        return file
+          ? [{
+              file,
+              timeoutConfigured: boundary.timeoutBounded,
+              safetyConfigured: boundary.retrySafe || boundary.abuseGuarded,
+            }]
+          : [];
+      }),
+    );
 }
 
 function clientReferences(clients: ClientObservation[]) {
@@ -330,13 +572,18 @@ export function saasAuditControls(): ControlEvaluator[] {
       });
     },
     (index) => {
-      const durable = signals.hasDurableData(index);
       const databaseSource = sourceFiles(index);
+      // A direct data-client query is itself durable-data evidence: a browser
+      // application can own a hosted database without a migration directory or
+      // a server-side driver dependency.
+      const durable =
+        signals.hasDurableData(index) ||
+        databaseSource.some((file) => dataClientOperations(file.content).present);
       const unbounded = references(
         databaseSource.filter(
           (file) =>
             /\bfindall\s*\(\s*\)/i.test(file.content) ||
-            hasUnboundedSql(file.content),
+            hasUnboundedDataQuery(file.content),
         ),
       );
       const nPlusOne = references(
@@ -417,7 +664,13 @@ export function saasAuditControls(): ControlEvaluator[] {
       });
     },
     (index) => {
-      const requestClient = requestContent(index, CLIENT_PATTERNS);
+      // A Supabase Edge Function *is* the request path. A recognized provider
+      // call inside one is synchronous external work while the caller waits, so
+      // it belongs to this control exactly like a `fetch` in an API route.
+      const requestClient = signals.mergeEvidence(
+        requestContentMatching(index, hasExternalClientCall),
+        edgeProviderEvidence(index),
+      );
       const asyncPath = sourceContent(index, [
         /\b(bullmq|bull\.queue|sidekiq|celery|rabbitmq|kafka|sqs|@async|quartz|scheduler|job queue|worker)\b/i,
       ]);
@@ -451,20 +704,29 @@ export function saasAuditControls(): ControlEvaluator[] {
     (index) => {
       const globalDefaults = globalTimeoutKinds(index);
       const clientFiles = sourceFiles(index).filter((file) =>
-        CLIENT_PATTERNS.some((pattern) => pattern.test(file.content)),
+        hasExternalClientCall(file.content),
+      );
+      const edgeObservations = edgeProviderObservations(index);
+      const edgePaths = new Set(
+        edgeObservations.map((observation) => observation.file.normalizedPath),
       );
       const clientObservations = [
-        ...clientFiles.map((file) => {
-          const kinds = clientKinds(file.content);
-          return {
-            file,
-            timeoutConfigured:
-              TIMEOUT_PATTERNS.some((pattern) => pattern.test(file.content)) ||
-              kinds.some((kind) => globalDefaults.has(kind)),
-            safetyConfigured: RETRY_SAFETY_PATTERNS.some((pattern) => pattern.test(file.content)),
-          };
-        }),
-        ...sourceFiles(index).flatMap((file) => axiosInstanceObservations(file, globalDefaults)),
+        ...edgeObservations,
+        ...clientFiles
+          .filter((file) => !edgePaths.has(file.normalizedPath))
+          .map((file) => {
+            const kinds = clientKinds(file.content);
+            return {
+              file,
+              timeoutConfigured:
+                TIMEOUT_PATTERNS.some((pattern) => pattern.test(file.content)) ||
+                kinds.some((kind) => globalDefaults.has(kind)),
+              safetyConfigured: RETRY_SAFETY_PATTERNS.some((pattern) => pattern.test(file.content)),
+            };
+          }),
+        ...sourceFiles(index)
+          .filter((file) => !edgePaths.has(file.normalizedPath))
+          .flatMap((file) => axiosInstanceObservations(file, globalDefaults)),
       ];
       const unboundedClients = clientObservations.filter((client) =>
         !client.timeoutConfigured,
@@ -525,10 +787,15 @@ export function saasAuditControls(): ControlEvaluator[] {
       });
     },
     (index) => {
-      const hardcoded = sourceContent(index, [
-        /\bhttps?:\/\/(?!localhost|127\.0\.0\.1|example\.com)[\w.-]+/i,
-        /\b(password|api[_-]?key|secret)\s*[:=]\s*["'][^"']{8,}/i,
-      ]);
+      const hardcoded = signals.findContentMatching(
+        index,
+        hasEmbeddedRuntimeConfiguration,
+        {
+          pathPatterns: SOURCE_PATHS,
+          excludePathPatterns: [TEST_OR_FIXTURE_PATH],
+          reachableSourceOnly: true,
+        },
+      );
       const envConfig = sourceContent(index, [
         /\b(process\.env|system\.getenv|@value\(|configurationproperties)\b/i,
       ]);
@@ -547,6 +814,20 @@ export function saasAuditControls(): ControlEvaluator[] {
           outcome: "fail",
           evidenceTier: "inferred",
           evidence: hardcoded,
+        });
+      }
+      if (isStaticFrontendOnly(index)) {
+        return helpers.result({
+          id: "saas.config-boundary",
+          domain: "security",
+          title: "Runtime configuration boundary",
+          summary:
+            "No embedded endpoint, credential, or capacity value was found, and this static frontend has no deployment-owned runtime configuration or connection-pool surface to assess.",
+          remediationCode: "add-security-baseline",
+          severity: "medium",
+          weight: 1,
+          outcome: "not_applicable",
+          evidenceTier: "absent",
         });
       }
       return helpers.positiveControl({
@@ -594,7 +875,7 @@ export function saasAuditControls(): ControlEvaluator[] {
             (/(^|\/)(tenant|organization|workspace|account)(\/|$)/i.test(file.normalizedPath) ||
               /\b(tenant[_-]?id|organization[_-]?id|workspace[_-]?id|account[_-]?id)\b/i.test(file.content)) &&
             (/\bfindall\s*\(/i.test(file.content) ||
-              (/\bselect\b/i.test(file.content) &&
+              (hasRealDataQuery(file.content) &&
                 !/\bwhere\b[^;]{0,200}\b(tenant[_-]?id|organization[_-]?id|workspace[_-]?id|account[_-]?id)\b/i.test(file.content))),
         ),
       );

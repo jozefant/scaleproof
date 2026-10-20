@@ -1,6 +1,39 @@
 import * as signals from "../signals";
+import { fileRole } from "../file-roles";
 import type { ControlEvaluator } from "./shared";
 import * as helpers from "./shared";
+
+/**
+ * Build manifests that make a directory independently buildable. A repository
+ * with `backend/pom.xml` and `frontend/package.json` has two modules whether or
+ * not a root workspace file ties them together, so a root workspace manifest is
+ * not required to recognize a multi-module layout.
+ */
+const NESTED_MODULE_MANIFEST =
+  /^(?<directory>[^/]+(?:\/[^/]+){0,2})\/(?:package\.json|pom\.xml|build\.gradle(?:\.kts)?|build\.sbt|go\.mod|cargo\.toml|pyproject\.toml|setup\.py|requirements\.txt|composer\.json|gemfile|mix\.exs|[^/]+\.csproj)$/i;
+
+/**
+ * Directories that hold a manifest without being a product module: tests,
+ * fixtures, examples, generated or vendored trees, documentation, and offline
+ * tooling. The shared file-role classifier owns that judgement.
+ */
+function nestedModuleDirectories(
+  index: signals.RepositoryIndex,
+): Map<string, signals.RepositoryIndex["files"][number]> {
+  const directories = new Map<
+    string,
+    signals.RepositoryIndex["files"][number]
+  >();
+  for (const file of index.files) {
+    if (!signals.isImplementationEvidencePath(file.path)) continue;
+    if (fileRole(index, file) !== "production") continue;
+    const directory = NESTED_MODULE_MANIFEST.exec(file.normalizedPath)?.groups
+      ?.directory;
+    if (!directory || directories.has(directory)) continue;
+    directories.set(directory, file);
+  }
+  return directories;
+}
 
 export const architectureDetectorMetadata = helpers.defineDetectorMetadata([
   {
@@ -55,10 +88,13 @@ export const architectureDetectorMetadata = helpers.defineDetectorMetadata([
     claim: "A configured multi-module layout signal is present.",
     applicability: "Repositories expected to support parallel team ownership.",
     requiredSignals: [
-      "At least two module manifests",
-      "Workspace or multi-module build definition",
+      "Workspace or multi-module build definition with at least two module manifests",
+      "Or at least two independently buildable nested module manifests, such as a backend and a frontend, with no root workspace manifest required",
     ],
-    disqualifyingSignals: ["Directory count without module configuration"],
+    disqualifyingSignals: [
+      "Directory count without module configuration",
+      "Manifests that belong to test, fixture, example, generated, vendored, documentation, or offline-tooling directories",
+    ],
     strongestEvidenceTier: "inferred",
     confidenceLimitation:
       "Layout does not prove low coupling, absence of dependency cycles, or independent deployability.",
@@ -232,23 +268,69 @@ export function architectureControls(): ControlEvaluator[] {
           ],
         },
       );
+      // Independently buildable nested modules are a module layout on their
+      // own. A backend and a frontend with separate manifests do not become one
+      // module because the repository has no root workspace file.
+      const nestedModules = nestedModuleDirectories(index);
+      const nestedManifests = [...nestedModules.values()]
+        .slice(0, 4)
+        .map((file) => ({ path: file.path, kind: "configuration" as const }));
+      // Corroborating boundary evidence: machine-readable contracts, CI
+      // definitions, and documented module boundaries.
+      const contracts = signals.findPaths(index, [
+        /openapi.*\.(ya?ml|json)$/,
+        /swagger.*\.(ya?ml|json)$/,
+        /\.proto$/,
+        /schema\.graphql$/,
+        /asyncapi.*\.(ya?ml|json)$/,
+      ], 2);
+      const moduleWorkflows = signals.findContent(index, [
+        /\b(?:working-directory|workingdirectory)\s*:/i,
+        /\b(?:matrix)\s*:\s*[\s\S]{0,200}\b(?:module|service|package|app)s?\s*:/i,
+      ], {
+        pathPatterns: [/(^|\/)\.github\/workflows\//, /(^|\/)\.gitlab-ci\.ya?ml$/],
+        maxResults: 2,
+      });
+      const documentedBoundaries = signals.findContent(index, [
+        /\b(?:module|service|component|package)\s+boundar(?:y|ies)\b/i,
+        /\|\s*(?:module|service|package)\s*\|/i,
+        /\bmay depend on\b/i,
+      ], {
+        pathPatterns: [/(^|\/)docs?\//, /architecture.*\.mdx?$/, /(^|\/)readme\.md$/],
+        maxResults: 2,
+      });
+
+      const configuredWorkspace =
+        manifests.length >= 2 && workspaceDefinition.length > 0;
+      const independentModules = nestedModules.size >= 2;
       const moduleLayout =
-        manifests.length >= 2 && workspaceDefinition.length > 0
-          ? signals.mergeEvidence(manifests, workspaceDefinition)
+        configuredWorkspace || independentModules
+          ? signals.mergeEvidence(
+              manifests,
+              nestedManifests,
+              workspaceDefinition,
+              contracts,
+              moduleWorkflows,
+              documentedBoundaries,
+            )
           : [];
       return helpers.positiveControl({
         id: "arch.module-boundaries",
         domain: "architecture",
         title: "Module layout signal",
         missingSummary:
-          "No multi-module manifest plus workspace definition was found; directory names alone are not treated as proof of low coupling.",
+          "No workspace definition and fewer than two independently buildable module manifests were found; directory names alone are not treated as proof of low coupling.",
         passSummary:
-          "A multi-module layout is configured. This is a layout signal, not proof of low coupling or independent team ownership.",
+          "A multi-module layout is configured, either as a workspace definition or as independently buildable nested modules. This is a layout signal, not proof of low coupling or independent team ownership.",
         remediationCode: "define-module-boundaries",
         severity: "high",
         weight: 4,
         inferred: moduleLayout,
-        partial: signals.mergeEvidence(manifests, workspaceDefinition),
+        partial: signals.mergeEvidence(
+          manifests,
+          nestedManifests,
+          workspaceDefinition,
+        ),
       });
     },
     (index) =>

@@ -9,7 +9,7 @@ architecture review and resolved reviewer comments that previously lived here.
 
 ## Open work
 
-### [ ] P0.6 Prove growth-target prioritization in the founder-visible flow
+### [done] P0.6 Prove growth-target prioritization in the founder-visible flow
 
 The deterministic policy is implemented and documented in
 [`SCORING.md`](./SCORING.md#growth-target-action-priority): `growthTarget`
@@ -30,7 +30,32 @@ npm run test:e2e
 npm run verify
 ```
 
-### [ ] P0.9 Harden external-provider evidence and prevent security false positives
+### [ ] P0.11 Close two test-determinism gaps found while accepting P0.6
+
+Both were raised by the P0.6 reviewer as non-blocking and are recorded here
+rather than reopening the accepted task.
+
+1. Growth-target neutrality is proven against one preference only. A bug where
+   `unknown`/`withheld` silently inherited a specific target's preference list
+   would still pass, because the current assertion only shows they differ from
+   `engineering_team` and match each other.
+2. `playwright.config.ts` sets `reuseExistingServer: !process.env.CI`. Locally,
+   an already-running `next dev` on port 3100 without `PLAYWRIGHT_TEST=1` and
+   with a real ambient `OPENAI_API_KEY` would be reused, and the browser suite
+   would reach the live provider. The failure mode is a red test rather than
+   silent billing, but it is the one hole in the blanked-key guarantee.
+   `playwright.coverage.config.ts` already sets `reuseExistingServer: false`.
+
+Acceptance:
+
+- Neutral growth targets are proven neutral against an explicit no-preference
+  baseline, not against a single non-neutral target.
+- The browser suite cannot reach a live provider through a reused server: either
+  the reuse is dropped, or the suite asserts the server it connected to is the
+  blanked-key test server before running any analysis request.
+- `npm run test:e2e` and `npm run verify` pass.
+
+### [done] P0.9 Harden external-provider evidence and prevent security false positives
 
 A public-corpus comparison exposed a material blind spot: a Supabase Edge
 Function can invoke an external AI or media provider while visibly disabling
@@ -93,7 +118,7 @@ Acceptance:
 - Focused synthetic tests, `npm run test:e2e`, and `npm run verify` pass. No
   real repository is used by automated tests or CI.
 
-### [ ] P0.10 Separate production execution evidence from test, generated, and offline tooling
+### [done] P0.10 Separate production execution evidence from test, generated, and offline tooling
 
 Corpus comparisons show that a security-sensitive multi-module repository can
 receive a critical exposed-secret verdict from explicitly non-production test
@@ -142,7 +167,7 @@ Acceptance:
 - Focused synthetic tests and `npm run verify` pass without using real
   repositories in CI.
 
-### [ ] P1.0 Classify static frontend content separately from deploy-time runtime configuration
+### [done] P1.0 Classify static frontend content separately from deploy-time runtime configuration
 
 A static React marketing site with only public image links was scored as having
 embedded runtime configuration, and received founder actions for backend-scale
@@ -180,7 +205,7 @@ Acceptance:
 - Update heuristic version, [`SCORING.md`](./SCORING.md), focused tests, and
   `npm run verify` in the same implementation change.
 
-### [ ] P1.1 Assess direct browser-to-BaaS data boundaries without mistaking client code for enforcement
+### [done] P1.1 Assess direct browser-to-BaaS data boundaries without mistaking client code for enforcement
 
 An authenticated browser application can call a BaaS database directly. Client
 session state and `user_id` predicates improve UX but do not prove server-side
@@ -216,7 +241,7 @@ Acceptance:
 - Tests preserve the no-source/no-path-to-GPT boundary, heuristic version and
   [`SCORING.md`](./SCORING.md) are updated, and `npm run verify` passes.
 
-### [ ] UI.1 Prevent the sticky report header from clipping section titles
+### [done] UI.1 Prevent the sticky report header from clipping section titles
 
 The reviewed 1440x960 Playwright report-summary and evidence artifacts show the
 repository and evidence titles sitting flush against the sticky report header;
@@ -238,6 +263,257 @@ Validation:
 npm run test:e2e
 npm run verify
 ```
+
+### [ ] UI.2 Prevent the sticky report header from clipping section kickers
+
+Found while accepting UI.1 and kept separate per the `UI.n` rule. UI.1 fixed the
+`h1`/`h2` titles; the small uppercase kicker that sits above them
+(`.repository-label`, `.section-kicker`, `.dossier-section-title > div > span`)
+still lands on the sticky header boundary and is visibly half-cut in the
+desktop and mobile report-summary and evidence artifacts.
+
+Acceptance:
+
+- The kicker above each scrolled-to section title has visible clearance below
+  the sticky header at 1440x960 and 390x844.
+- The Playwright artifact check measures the kicker's glyph ink, not only the
+  title's.
+- Saved desktop and mobile artifacts show no clipped kicker and no regression
+  in title clearance or the report controls.
+
+Validation:
+
+```bash
+npm run test:e2e
+npm run verify
+```
+
+### [ ] P0.12 Bind the validation parse to a rejection path, not a receiver-name list
+
+Raised by the P0.9 reviewer as non-blocking and recorded here rather than
+reopening the accepted task. `NON_VALIDATION_RECEIVER` in
+[`src/lib/analysis/controls/security.ts`](./src/lib/analysis/controls/security.ts)
+excludes standard parsers by name, which is the same weakness P0.9 removed from
+provider detection. Seven common non-validation parsers therefore pass
+`security.validation` inside a reachable handler: CSV (`Papa.parse(input)`),
+`cookieParser.parse` (the anchored `^cookie$` alternative does not match it),
+multipart (`formidable.parse(req)`), date NLP, protobuf, user-agent, and
+Markdown. This is a false pass on a security control.
+
+The direction is to require the parsed value to reach a rejection path
+(a thrown error, a 4xx response, or a checked `success` discriminant) rather
+than to enumerate parsers. Both P0.9 acceptance halves must keep holding: a
+declared package still fails, a bounded handler parse still passes.
+
+Also correct the [`SCORING.md`](./SCORING.md) "Server-side enforcement"
+sentence that lists "a standard parser that shares the method name" in the
+never-passes column as though it were a general rule; the exclusion is a finite
+list.
+
+Acceptance:
+
+- The seven parser forms above no longer pass `security.validation`.
+- Every P0.9 positive and negative row still holds, proven by mutation.
+- SCORING.md describes the rule that the code actually implements.
+
+### [ ] P0.13 Stop re-export edges pulling browser modules into server-execution scope
+
+Raised by the P0.9 reviewer. `serverExecutionPaths` in
+[`src/lib/analysis/file-roles.ts`](./src/lib/analysis/file-roles.ts) walks the
+import closure of server-surface roots. A shared barrel containing
+`export * from "./Badge"` is a module-resolution edge, not an execution edge,
+so a browser React component whose only "enforcement" is `user.role === "admin"`
+in JSX earns `pass`/`enforced` for `security.authorization`. Barrel files that
+re-export components are common, so P0.9 item 2's "do not pass from browser-only
+code" leaks along this path.
+
+Direct server imports of a component are a separate and defensible case: in an
+SSR framework that component genuinely runs on the server.
+
+Acceptance:
+
+- A server root reaching a `.tsx` component only through an `export *` barrel
+  does not place that component in server-execution scope.
+- Genuine helper and middleware modules stay in scope (the P0.9 fix round).
+- SCORING.md's "a module no server root reaches is not server execution"
+  sentence is restated to match the implemented rule.
+
+### [ ] P0.14 Narrow execution-role classification over-reach
+
+Raised by the P0.10 reviewer and implementer. Each item widens the
+non-production classification in
+[`src/lib/analysis/file-roles.ts`](./src/lib/analysis/file-roles.ts) past what
+P0.10 intended, and each moves a file out of production credential or
+request-path scope.
+
+1. `GENERATED_BANNER` matches a header such as `# DO NOT EDIT - managed by
+   Terraform`, so a real deployment configuration is classified `generated`.
+   A deployment-configuration carve-out is needed.
+2. `CI_DEFINITION` covers `.github/workflows` only. `.github/actions/*/action.yml`
+   composite actions also hold deployment secrets and currently classify as
+   `tooling`.
+3. `TOOLING_DIRECTORY` matches any `tools/`, `scripts/`, or `bin/` path segment,
+   so genuine production code under `src/tools/` loses request-path findings.
+4. `*.d.ts` classifies as `generated`. Accepted as defensible during P0.10
+   review (a declaration file carries no executable logic and no runtime value),
+   recorded here for a second opinion rather than left implicit.
+
+Acceptance:
+
+- A deployment configuration carrying a generated banner stays in production
+  credential scope, with a synthetic fixture per item.
+- The P0.10 acceptance matrix still holds: test credentials, fixtures,
+  generated UI, migrations, and offline scripts still cannot raise a critical
+  production secret.
+
+### [ ] P0.15 Repair comment stripping in the shared signal reader
+
+Raised by the P0.9 implementer and confirmed by the reviewer.
+`withoutComments` in [`src/lib/analysis/signals.ts`](./src/lib/analysis/signals.ts)
+damages content it should preserve:
+
+1. A line beginning with `#` is treated as a comment, which is required for
+   Python and YAML but also deletes a JavaScript or TypeScript private class
+   member. A credential read in a `#private` field escapes provider detection:
+   `class A { #apiKey = Deno.env.get("...") }` reduces to `class A { }`.
+2. `//` stripping truncates an unquoted URL, so
+   `endpoint: https://api.example.invalid/v1?max_tokens=50` becomes
+   `endpoint: https:`. This reaches `evidenceState` guard files
+   (`.yaml`, `.yml`, `.conf`). It fails safe - lost evidence becomes `unknown`
+   rather than a false pass - but it does so silently.
+
+Acceptance:
+
+- Comment stripping is language-aware enough that a `#`-prefixed private field
+  and an unquoted URL survive, with both forms pinned as test rows.
+- Python and YAML comment handling is unchanged, proven by mutation.
+
+### [ ] P0.16 Correct degenerate and mislabelled detection patterns
+
+Four narrow defects found during P0.9 review. None produces a false pass today;
+each measures something other than its name, so each is a latent false result
+after an unrelated edit.
+
+1. `RESTRICTED_CORS` (pre-existing since P0.8,
+   [`src/lib/analysis/controls/security.ts`](./src/lib/analysis/controls/security.ts))
+   matches the closing quote of the header *name*, so any file mentioning
+   `Access-Control-Allow-Origin` reads as restricted CORS, and a
+   variable-valued origin also reads as restricted. It cannot produce a false
+   pass because it is ANDed with `!wildcardCors` and `exposedProviderCall`
+   returns `fail` first - it is currently a dead conjunct.
+2. `hasPath(/\.[jt]sx$/)` in
+   [`src/lib/repository/scanner.ts`](./src/lib/repository/scanner.ts) labels any
+   TSX repository "React", including Preact and Solid.
+3. `byPath.get(evidence.path.toLowerCase())` in
+   [`src/lib/analysis/controls/saas-audit.ts`](./src/lib/analysis/controls/saas-audit.ts)
+   compares against `normalizedPath`, which also strips a leading `./`; a
+   scanner emitting that form would be dropped silently.
+4. `guardFiles` in
+   [`src/lib/analysis/external-provider.ts`](./src/lib/analysis/external-provider.ts)
+   accepts any non-manifest `.yml`/`.json`/`.sql`/`.toml`, so a CI workflow
+   merely mentioning "rate limit" can satisfy `security.provider-abuse-guard`.
+   It also still uses the pre-P0.9-fix `isProductionExecutionFile &&
+   isServerSurfaceFile` shape, so a rate limiter living only in
+   `src/lib/rate-limit.ts` is missed. The failure mode is a missed pass on an
+   evidence-gap control, not a security downgrade.
+
+Acceptance: each pattern matches what its name claims, pinned by a negative
+test row; no P0.8 or P0.9 outcome changes.
+
+### [ ] P1.4 Role-scope the configuration boundary and calibrate the non-production credential signal
+
+Raised by the P0.10 implementer. Two loose ends left deliberately outside
+P0.10's scope, which named only database, slow-work, and failure-safety.
+
+1. `saas.config-boundary` is not role-scoped (P1.0 owns it). In the P0.10
+   non-production fixture it still fails on credential assignments in a
+   generated UI primitive, a migration, and an importer - exactly the
+   misattribution P0.10 removes elsewhere.
+2. A non-production credential review signal currently costs the full weight-5
+   security control, identical in score impact to a production failure. A
+   `.env.example` holding a placeholder of twenty characters or more trips it.
+   The downgrade is deliberate (the signal must still cost something), but the
+   weight has not been calibrated against the six golden scenarios.
+
+Acceptance: role scope is consistent across configuration-boundary findings;
+the non-production weight is justified in SCORING.md; golden scenarios are
+unchanged or the change is explicitly approved.
+
+### [ ] P1.5 Reconsider two provider-applicability judgements
+
+Raised by the P0.9 implementer while building the fixtures; neither blocks
+acceptance and both are judgement calls rather than defects.
+
+1. A browser `fetch` with no timeout produces a critical `saas.failure-safety`
+   failure. The file is production-role but is not a server surface, so the
+   critical severity may overstate it.
+2. `saas.slow-work`'s async-boundary evidence is repository-wide: any reachable
+   file containing `worker`, `scheduler`, or `queue` satisfies it even when
+   unrelated to the provider call that raised the finding.
+3. A `Deno.cron`-only Edge Function must still show restricted CORS to earn a
+   boundary pass, which is an odd requirement for a function with no HTTP
+   surface.
+
+Acceptance: each applicability rule is either justified in SCORING.md or
+narrowed, with the P0.9 acceptance matrix unchanged.
+
+### [ ] T.1 Pin the dependency-manifest root exclusion
+
+The P0.9 reviewer proved by mutation that removing the manifest exclusion from
+`serverExecutionPaths` in
+[`src/lib/analysis/file-roles.ts`](./src/lib/analysis/file-roles.ts) lets a
+`package.json` containing `hasRole(user)` and `body.parse(req.body)` reach
+`pass`/`enforced` for both `security.authorization` and `security.validation` -
+yet the full suite still passes 408 of 408. The guard is load-bearing and
+untested. The comment in `src/lib/analysis/p0-9.test.ts` claiming a dependency
+manifest is never a server-graph root does not pin it.
+
+Acceptance: a test fails when the exclusion is removed.
+
+### [ ] P1.2 Exclude zero-applicable-weight domains from the weighted score
+
+Raised by the P1.0 implementer as a scoring-model question outside P1.0's
+scope, and recorded rather than decided.
+
+`scoreChecks` returns `score: 0` when `assessableWeight === 0`. Under the new
+static-frontend profile a static site therefore shows "Reliability 0/100" and
+"Observability 0/100" while every control in those domains reads "Not
+applicable". This is not a regression - those controls previously scored 0 as
+missing evidence - and the 0 is what keeps a static site below `Fundable`
+(maximum reachable score 70). But a founder-facing 0 beside all-not-applicable
+controls reads as a failure rather than an absence of scope.
+
+Acceptance:
+
+- A domain with no assessable weight is either excluded from the weighted sum
+  or displayed as not assessed, never as a 0 score.
+- The verdict cap that currently depends on those zeros is preserved
+  explicitly, not by accident: a static frontend still cannot reach `Fundable`.
+- Golden scenarios are unchanged unless the change is intended and versioned.
+- Heuristic version, [`SCORING.md`](./SCORING.md), and focused tests updated
+  together; `npm run verify` passes.
+
+### [ ] P1.3 Correct the tenant-isolation summary for a client-only tenant predicate
+
+Raised while accepting P1.1 and recorded rather than folded in, because
+changing the predicate test would weaken an existing security control.
+
+A browser query such as `.from("orgs").select("*").eq("organization_id",
+org.id)` is now recognized as a real data query, so it can still produce the
+concrete `saas.tenant-isolation` failure whose summary reads "this query has
+neither a tenant predicate nor a central isolation boundary." With a client
+`.eq("organization_id", ...)` visible that sentence is factually wrong, even
+though the P1.1 principle holds: a client predicate is not enforcement.
+
+Acceptance:
+
+- A client-only tenant predicate produces an accurate summary - either
+  corrected wording or a distinct "client-only tenant predicate, not
+  server-side enforcement" state.
+- The finding's severity and the principle that a client predicate never earns
+  authorization credit are unchanged.
+- Golden scenarios unchanged; heuristic version, [`SCORING.md`](./SCORING.md),
+  and focused tests updated together.
 
 ### [ ] P2.2 Complete external heuristic calibration
 
@@ -264,7 +540,7 @@ Acceptance:
 - No claim says the heuristic is externally calibrated before this work is
   complete.
 
-### [ ] P2.3 Package Scaleproof as a public-repository CLI
+### [done] P2.3 Package Scaleproof as a public-repository CLI
 
 Make the existing public GitHub scan pipeline available as an installable Node
 22 command without changing the web app or widening its trust boundary. The

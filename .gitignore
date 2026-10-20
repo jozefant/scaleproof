@@ -7,8 +7,13 @@ out/
 *.tsbuildinfo
 *.tsbuildinfo
 
+# CLI bundle build output
+cli/dist/
+*.tgz
+
 # Test output
 coverage/
+.coverage/
 playwright-report/
 test-results/
 

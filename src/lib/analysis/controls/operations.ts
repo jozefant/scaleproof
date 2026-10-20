@@ -6,7 +6,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.structured-logging",
     claim: "Structured application logging is configured.",
-    applicability: "Applications expected to be diagnosed from runtime logs.",
+    applicability:
+      "Applications expected to be diagnosed from runtime logs. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Structured logger, JSON encoder, or machine-readable log configuration"],
     disqualifyingSignals: ["Console output or generic logging dependency alone"],
     strongestEvidenceTier: "enforced",
@@ -17,7 +18,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.log-categories",
     claim: "Operational, security, or audit log categories are distinguished.",
-    applicability: "Applications with security, compliance, or operational events.",
+    applicability:
+      "Applications with security, compliance, or operational events. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Audit, security-event, or operational log category evidence"],
     disqualifyingSignals: ["One undifferentiated application log stream"],
     strongestEvidenceTier: "documented",
@@ -28,7 +30,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.log-redaction",
     claim: "Log redaction or never-log rules are present.",
-    applicability: "Applications whose logs could encounter personal or secret data.",
+    applicability:
+      "Applications whose logs could encounter personal or secret data. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Redaction, masking, sensitive-field filtering, or never-log rule"],
     disqualifyingSignals: ["Privacy policy without logging-specific handling"],
     strongestEvidenceTier: "enforced",
@@ -39,7 +42,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.observability",
     claim: "Lifecycle health and telemetry surfaces are both present.",
-    applicability: "Long-running services intended for operated deployment.",
+    applicability:
+      "Long-running services intended for operated deployment. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Health or lifecycle signal", "Metrics or tracing signal"],
     disqualifyingSignals: ["One health endpoint or observability keyword alone"],
     strongestEvidenceTier: "enforced",
@@ -50,7 +54,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.alerting",
     claim: "Alert rules, integrations, or escalation expectations are present.",
-    applicability: "Services with production availability expectations.",
+    applicability:
+      "Services with production availability expectations. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Alert rule/integration configuration or documented escalation policy"],
     disqualifyingSignals: ["Metrics configuration without alert conditions"],
     strongestEvidenceTier: "enforced",
@@ -61,7 +66,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.runbook",
     claim: "Operations or incident procedures are documented.",
-    applicability: "Services requiring startup, shutdown, incident, or recovery actions.",
+    applicability:
+      "Services requiring startup, shutdown, incident, or recovery actions. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Operations, incident, runbook, or playbook document"],
     disqualifyingSignals: ["Architecture documentation without operating procedures"],
     strongestEvidenceTier: "documented",
@@ -72,7 +78,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.log-retention",
     claim: "Log retention, rotation, or deletion rules are configured or documented.",
-    applicability: "Applications producing durable operational, security, or audit logs.",
+    applicability:
+      "Applications producing durable operational, security, or audit logs. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Rotation/retention configuration or log-specific retention policy"],
     disqualifyingSignals: ["General data retention without log-class treatment"],
     strongestEvidenceTier: "enforced",
@@ -83,7 +90,8 @@ export const operationsDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "ops.alert-delivery",
     claim: "Production alert delivery and acknowledgement require runtime verification.",
-    applicability: "Services with alerting expectations.",
+    applicability:
+      "Services with alerting expectations. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Runtime delivery, acknowledgement, and rehearsal evidence"],
     disqualifyingSignals: ["Repository alert rules without delivery evidence"],
     strongestEvidenceTier: "runtime_only",
