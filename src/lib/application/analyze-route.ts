@@ -83,8 +83,17 @@ export interface AnalyzeRouteDependencies {
     signal?: AbortSignal,
     onSynthesisRetry?: SynthesisRetryHandler,
     diagnostics?: ExternalServiceDiagnostics,
+    deadlineAt?: number,
   ) => Promise<AnalysisReport>;
 }
+
+/**
+ * The analysis route has `maxDuration = 120` seconds. Acquisition (up to 90 s)
+ * and synthesis (up to 45 s) share this budget, so the platform never stops
+ * the function before the route returns its own error. The margin covers
+ * report rendering and temporary-directory cleanup.
+ */
+export const REQUEST_BUDGET_MS = 110_000;
 
 function testMandatorySynthesis(input: SynthesisInput): Promise<SynthesisResult> {
   return Promise.resolve({
@@ -105,11 +114,12 @@ function testMandatorySynthesis(input: SynthesisInput): Promise<SynthesisResult>
 const DEFAULT_DEPENDENCIES: AnalyzeRouteDependencies = {
   acquireDemo: acquireDemoRepository,
   acquirePublic: acquirePublicRepository,
-  analyze: (snapshot, context, signal, onSynthesisRetry, diagnostics) =>
+  analyze: (snapshot, context, signal, onSynthesisRetry, diagnostics, deadlineAt) =>
     analyzeRepository(snapshot, context, {
       signal,
       onSynthesisRetry,
       diagnostics,
+      deadlineAt,
       synthesize:
         process.env.PLAYWRIGHT_TEST === "1" ? testMandatorySynthesis : undefined,
     }),
@@ -120,6 +130,7 @@ export async function handleAnalyzeRequest(
   dependencies: AnalyzeRouteDependencies = DEFAULT_DEPENDENCIES,
   onSynthesisRetry?: SynthesisRetryHandler,
 ): Promise<Response> {
+  const deadlineAt = Date.now() + REQUEST_BUDGET_MS;
   try {
     const diagnostics = createExternalServiceDiagnostics();
     const contentLength = Number(request.headers.get("content-length") ?? "0");
@@ -175,6 +186,7 @@ export async function handleAnalyzeRequest(
       request.signal,
       onSynthesisRetry,
       diagnostics,
+      deadlineAt,
     );
     return Response.json(report, {
       status: 200,
