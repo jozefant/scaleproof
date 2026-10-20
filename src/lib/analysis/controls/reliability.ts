@@ -6,7 +6,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.stateless",
     claim: "The request and session state model supports or blocks multi-instance handling.",
-    applicability: "Stateful services expected to scale horizontally.",
+    applicability:
+      "Stateful services expected to scale horizontally. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["External/stateless session evidence or concrete process-local state pattern"],
     disqualifyingSignals: ["Generic scaling prose without a state ownership signal"],
     strongestEvidenceTier: "inferred",
@@ -17,7 +18,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.database-foundations",
     claim: "Database migration, indexing, or connection-pooling foundations are visible.",
-    applicability: "Repositories with detected durable data.",
+    applicability:
+      "Repositories with detected durable data. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Migration/schema path, index declaration, or pool configuration"],
     disqualifyingSignals: ["Database dependency without growth-related configuration"],
     strongestEvidenceTier: "enforced",
@@ -28,7 +30,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.failure-controls",
     claim: "External work has both time bounds and repeat/overload safety.",
-    applicability: "Repositories performing dependency or asynchronous external work.",
+    applicability:
+      "Repositories performing dependency or asynchronous external work. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: [
       "Dependency time bound",
       "Retry, idempotency, circuit-breaker, bulkhead, or backpressure control",
@@ -42,7 +45,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.health-lifecycle",
     claim: "Runtime readiness, liveness, or graceful-shutdown controls are present.",
-    applicability: "Long-running services deployed behind an orchestrator or proxy.",
+    applicability:
+      "Long-running services deployed behind an orchestrator or proxy. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Readiness, liveness, graceful shutdown, or termination-grace configuration"],
     disqualifyingSignals: ["Generic health wording outside runtime configuration or code"],
     strongestEvidenceTier: "enforced",
@@ -53,7 +57,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.async-work",
     claim: "A queue, worker, scheduler, or background-job path is visible.",
-    applicability: "Applications with long-running or bursty work.",
+    applicability:
+      "Applications with long-running or bursty work. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Recognized queue, worker, scheduler, or background-job signal"],
     disqualifyingSignals: ["Async language syntax without workload decoupling"],
     strongestEvidenceTier: "inferred",
@@ -64,7 +69,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.load-tests",
     claim: "A repeatable executable performance or load-testing path is present.",
-    applicability: "Applications claiming 10x or 100x user readiness.",
+    applicability:
+      "Applications claiming 10x or 100x user readiness. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Executable load test, benchmark, command, or enforced performance budget"],
     disqualifyingSignals: ["Documentation mentioning performance without a repeatable path"],
     strongestEvidenceTier: "enforced",
@@ -75,7 +81,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.ha-path",
     claim: "An enforced or documented high-availability path is present.",
-    applicability: "Services with 100x or availability ambitions.",
+    applicability:
+      "Services with 100x or availability ambitions. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Replica/failure-domain configuration or explicit HA design"],
     disqualifyingSignals: ["Generic scalability language"],
     strongestEvidenceTier: "enforced",
@@ -86,7 +93,8 @@ export const reliabilityDetectorMetadata = helpers.defineDetectorMetadata([
   {
     id: "rel.actual-capacity",
     claim: "Production throughput, latency, and headroom require runtime measurement.",
-    applicability: "Deployed applications making capacity claims.",
+    applicability:
+      "Deployed applications making capacity claims. Not applicable to a static-frontend repository with no server surface.",
     requiredSignals: ["Current production workload, latency, saturation, and headroom measurements"],
     disqualifyingSignals: ["Repository architecture or load-test presence without current results"],
     strongestEvidenceTier: "runtime_only",

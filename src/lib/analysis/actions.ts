@@ -142,6 +142,13 @@ const ACTIONS: Record<string, ActionTemplate> = {
     verification:
       "One documented command runs the full gate and returns a non-zero exit code for a deliberate regression.",
   },
+  "complete-submission-path": {
+    title: "Give the visible form a destination",
+    rationale:
+      "Connect the form to a submit handler, form action, or hosted form service so a visitor's input reaches somebody, and show the visitor a success or failure state.",
+    verification:
+      "Submitting the form from the browser reaches the intended destination and the visitor sees the result of that submission.",
+  },
   "reduce-knowledge-concentration": {
     title: "Reduce single-maintainer knowledge risk",
     rationale:

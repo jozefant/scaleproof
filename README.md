@@ -192,7 +192,7 @@ repository or add mobile captures to this public gallery.
 
 ## Canonical product documentation
 
-These four documents own the current product behaviour. Keep durable facts in
+These documents own the current product behaviour. Keep durable facts in
 their single applicable owner rather than repeating them elsewhere.
 
 | Document | Authority |
@@ -201,6 +201,7 @@ their single applicable owner rather than repeating them elsewhere.
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Modules, dependency direction, request lifecycle, and failure behaviour |
 | [SCORING.md](./SCORING.md) | Versioned heuristic, evidence model, verdicts, and calibration policy |
 | [SECURITY.md](./SECURITY.md) | Trust boundary, retention, and public-deployment gate |
+| [cli/README.md](./cli/README.md) | CLI install, usage, flags, exit codes, and packaging |
 
 [AGENTS.md](./AGENTS.md) is the contributor operating guide;
 [TASKS.md](./TASKS.md) is the open-work backlog;

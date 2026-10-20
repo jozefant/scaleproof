@@ -59,6 +59,9 @@ const DEFAULT_METADATA_PROFILES: Record<
   "saas.written-decisions": { domain: "architecture", severity: "medium" },
   "saas.dependency-freshness": { domain: "quality", severity: "info" },
   "saas.critical-test-distribution": { domain: "quality", severity: "high" },
+  "security.provider-abuse-guard": { domain: "security", severity: "high" },
+  "security.provider-io-bounds": { domain: "security", severity: "medium" },
+  "res.generated-object-lifecycle": { domain: "resilience", severity: "high" },
 };
 
 function defaultProfile(id: string): Pick<DetectorMetadata, "domain" | "severity"> {
@@ -162,6 +165,76 @@ export function positiveControl(input: {
     outcome: "unknown",
     evidenceTier: "absent",
     evidence: input.partial,
+  });
+}
+
+/**
+ * A control whose three states must stay separable: repository evidence that
+ * the control exists, a documented claim that only the deployed provider or
+ * platform can prove, and no evidence at all.
+ *
+ * The distinction is the point. Reporting "no rate limit" when the repository
+ * simply cannot see the deployed one asserts a runtime fact from a repository;
+ * reporting a dashboard note as enforcement credits an intention as a control.
+ * Missing evidence stays missing evidence - it is never a concrete failure.
+ */
+export function repositoryEvidenceControl(input: {
+  id: string;
+  domain: CheckResult["domain"];
+  title: string;
+  remediationCode: string;
+  severity: Severity;
+  weight: number;
+  applicable: boolean;
+  notApplicableSummary: string;
+  verified: EvidenceReference[];
+  runtimeClaim: EvidenceReference[];
+  /** Safe paths that show why the control applies, kept on a missing result. */
+  missingEvidence?: EvidenceReference[];
+  passSummary: string;
+  runtimeClaimSummary: string;
+  missingSummary: string;
+}): CheckResult {
+  const control = {
+    id: input.id,
+    domain: input.domain,
+    title: input.title,
+    remediationCode: input.remediationCode,
+    severity: input.severity,
+    weight: input.weight,
+  };
+  if (!input.applicable) {
+    return result({
+      ...control,
+      summary: input.notApplicableSummary,
+      outcome: "not_applicable",
+      evidenceTier: "absent",
+    });
+  }
+  if (input.verified.length > 0) {
+    return result({
+      ...control,
+      summary: input.passSummary,
+      outcome: "pass",
+      evidenceTier: "enforced",
+      evidence: input.verified,
+    });
+  }
+  if (input.runtimeClaim.length > 0) {
+    return result({
+      ...control,
+      summary: input.runtimeClaimSummary,
+      outcome: "unknown",
+      evidenceTier: "runtime_only",
+      evidence: input.runtimeClaim,
+    });
+  }
+  return result({
+    ...control,
+    summary: input.missingSummary,
+    outcome: "unknown",
+    evidenceTier: "absent",
+    evidence: input.missingEvidence,
   });
 }
 

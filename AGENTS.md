@@ -22,12 +22,14 @@ more than three immediate actions.
 | Area | Responsibility |
 | --- | --- |
 | `src/app` | Next.js routes, page shell, and the analysis API |
+| `src/cli` | Terminal adapter: argument parsing, exit codes, and report output |
 | `src/components` | Founder-facing interface and report presentation |
 | `src/lib/repository` | Strict GitHub acquisition, scanning, and anonymous history aggregation |
 | `src/lib/analysis` | Deterministic controls, scoring, caps, evidence, and action candidates |
 | `src/lib/ai` | Mandatory allowlisted GPT-5.6 synthesis with bounded retries |
 | `src/lib/application` | Analysis orchestration and raw-content release before synthesis |
 | `src/lib/report` | Public report contract and Markdown rendering |
+| `cli` | Publishable CLI package: launcher, esbuild bundle, README, and licence |
 | `fixtures/scaleproof-demo` | Synthetic, stable end-to-end analysis fixture |
 | `docs/ARCHITECTURE.md` | Runtime boundaries, dependency direction, and failure behaviour |
 

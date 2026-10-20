@@ -17,6 +17,13 @@ async function sourceFiles(directory: string): Promise<string[]> {
   return files;
 }
 
+const MODULE_SPECIFIER =
+  /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*|^\s*import\s+)["']([^"']+)["']/gm;
+
+function moduleSpecifiers(source: string): string[] {
+  return [...source.matchAll(MODULE_SPECIFIER)].map((match) => match[1]!);
+}
+
 describe("architecture dependency direction", () => {
   it.each([
     [
@@ -29,12 +36,17 @@ describe("architecture dependency direction", () => {
     ],
     [
       "components",
-      /@\/lib\/(?:analysis|repository|ai|application)(?:\/|["'])/,
+      /@\/lib\/(?:analysis|repository|ai|application)(?:\/|$)/,
     ],
   ])("%s does not import a forbidden higher layer", async (area, forbidden) => {
     const files = await sourceFiles(path.join(process.cwd(), "src", area));
     for (const file of files) {
-      expect(await readFile(file, "utf8"), file).not.toMatch(forbidden);
+      // The rule is about dependencies, so it is applied to module specifiers
+      // rather than to raw file text: a synthetic fixture path inside a test
+      // is data, not an import.
+      for (const specifier of moduleSpecifiers(await readFile(file, "utf8"))) {
+        expect(specifier, file).not.toMatch(forbidden);
+      }
     }
   });
 

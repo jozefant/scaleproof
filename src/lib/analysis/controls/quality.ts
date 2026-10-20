@@ -17,6 +17,35 @@ const RUNNER_PATTERNS: Record<TestFamily, RegExp> = {
 };
 const CI_PATH = [/^\.github\/workflows\//, /^\.circleci\//, /(^|\/)\.gitlab-ci\.ya?ml$/, /azure-pipelines\.ya?ml$/];
 
+// Product completeness: a visible form whose input has no path out of the
+// browser. This reports what the product does today. It is not evidence about
+// data handling, authentication, or resilience.
+const FORM_MARKUP = /<form\b/i;
+const FORM_VIEW_PATHS = [/\.(?:[cm]?[jt]sx?|vue|svelte|astro|html?)$/i];
+const FORM_TEST_OR_FIXTURE_PATH =
+  /(^|\/)(?:tests?|__tests__|fixtures?|examples?|docs?|\.storybook)(\/|$)|\.(?:spec|test)\.[cm]?[jt]sx?$/i;
+const FORM_SUBMIT_PATHS = [
+  /\bon[Ss]ubmit\s*[=:]/,
+  /\bhandleSubmit\b/,
+  /\b(?:requestSubmit|form\.submit)\s*\(/,
+  // A submission target must be bound to the form element itself. A form
+  // whose own action is a `mailto:` does submit; a `mailto:` or `tel:` link
+  // elsewhere in the file is a browser hand-off and is not this form's path.
+  /<form\b[^>]{0,400}?\baction\s*=\s*(?:\{|["'](?!#|javascript:|\s*["']))/is,
+  /<form\b[^>]{0,400}?\bmethod\s*=\s*["']post["']/is,
+  /<form\b[^>]{0,400}?\bdata-netlify\b/is,
+  /\b(?:formspree|getform|web3forms|formcarry|basin|emailjs|netlify-forms)\b/i,
+  /\b(?:fetch|axios|supabase|firebase|sendBeacon|XMLHttpRequest|useMutation|graphql)\b/i,
+  // A form that forwards its own props, or a recognized form-state hook, has a
+  // submission path defined outside this file. Report only unambiguous cases.
+  /<form\b[^>]{0,200}\{\s*\.\.\./is,
+  /\b(?:useForm|useActionState|useFormState|formAction)\b/,
+];
+
+function hasSubmitPath(content: string): boolean {
+  return FORM_SUBMIT_PATHS.some((pattern) => pattern.test(content));
+}
+
 function testFiles(index: Parameters<ControlEvaluator>[0], family?: TestFamily): EvidenceReference[] {
   const patterns = family ? TEST_FAMILY_PATTERNS[family] : Object.values(TEST_FAMILY_PATTERNS).flat();
   return signals.findPaths(index, patterns, 6);
@@ -113,6 +142,21 @@ export const qualityDetectorMetadata = helpers.defineDetectorMetadata([
     confidenceLimitation:
       "Configuration does not prove timely review or safe dependency upgrades.",
     remediationCode: "add-quality-gate",
+  },
+  {
+    id: "quality.form-completeness",
+    claim: "A visible form has a submit handler, form action, or outbound destination.",
+    applicability: "Repositories with visible form markup in reachable browser source.",
+    requiredSignals: [
+      "Form markup with a submit handler, form action, hosted form service, or outbound call in the same file",
+    ],
+    disqualifyingSignals: [
+      "Form markup with no submit handler, no form action, and no outbound call",
+    ],
+    strongestEvidenceTier: "inferred",
+    confidenceLimitation:
+      "Static markup inspection cannot prove that the destination accepts, stores, or delivers the submitted input, and it makes no claim about data handling, authentication, or resilience.",
+    remediationCode: "complete-submission-path",
   },
 ] as const);
 
@@ -271,5 +315,47 @@ export function qualityControls(): ControlEvaluator[] {
           { pathPatterns: [/\.md$/] },
         ),
       }),
+    (index) => {
+      const formOptions = {
+        pathPatterns: FORM_VIEW_PATHS,
+        excludePathPatterns: [FORM_TEST_OR_FIXTURE_PATH],
+        reachableSourceOnly: true,
+      };
+      const forms = signals.findContent(index, [FORM_MARKUP], formOptions);
+      const inertForms = signals.findContentMatching(
+        index,
+        (content) => FORM_MARKUP.test(content) && !hasSubmitPath(content),
+        formOptions,
+      );
+      if (inertForms.length > 0) {
+        return helpers.result({
+          id: "quality.form-completeness",
+          domain: "quality",
+          title: "Visible form has no submission path",
+          summary:
+            "A visible form has no submit handler, form action, or outbound call, so input typed into it has no path out of the browser. This is a product-completeness signal only; it establishes nothing about data handling, authentication, or resilience.",
+          remediationCode: "complete-submission-path",
+          severity: "medium",
+          weight: 3,
+          outcome: "fail",
+          evidenceTier: "inferred",
+          evidence: inertForms,
+        });
+      }
+      return helpers.positiveControl({
+        id: "quality.form-completeness",
+        domain: "quality",
+        title: "Form submission path",
+        missingSummary:
+          "No visible form markup was found, so form completeness cannot be assessed.",
+        passSummary:
+          "Every visible form has a submit handler, form action, or outbound destination in the same file. The destination itself is not verified here.",
+        remediationCode: "complete-submission-path",
+        severity: "medium",
+        weight: 3,
+        inferred: forms,
+        applicable: forms.length > 0,
+      });
+    },
   ];
 }
