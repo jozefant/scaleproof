@@ -6,6 +6,7 @@ import type { CheckResult } from "@/lib/analysis/types";
 
 import {
   buildAllowlistedPayload,
+  proposalSchemaFor,
   synthesizeFounderActions,
   type SynthesisInput,
 } from "./synthesis";
@@ -85,6 +86,27 @@ describe("OpenAI synthesis boundary", () => {
     expect(serialized).not.toContain(finding.title);
     expect(serialized).not.toContain(finding.summary);
     expect(built.estimatedTokens).toBeLessThanOrEqual(12_000);
+  });
+
+  it("tells the model which deterministic actions it may reorder", () => {
+    const input = synthesisInput();
+    const built = buildAllowlistedPayload(input);
+
+    expect(built.payload.candidateActions).toEqual(
+      input.fallbackActions.map((action) => action.remediationCode),
+    );
+  });
+
+  it("limits the response schema to the candidate codes, each one exactly once in count", () => {
+    const schema = proposalSchemaFor(["remove-exposed-secret", "add-load-path"]);
+    const codes = (...list: string[]) => ({
+      actions: list.map((remediationCode) => ({ remediationCode })),
+    });
+
+    expect(schema.safeParse(codes("add-load-path", "remove-exposed-secret")).success).toBe(true);
+    // A real GPT response proposed codes outside the deterministic actions.
+    expect(schema.safeParse(codes("remove-exposed-secret", "add-test-layers")).success).toBe(false);
+    expect(schema.safeParse(codes("remove-exposed-secret")).success).toBe(false);
   });
 
   it("accepts only remediation-code ordering and keeps deterministic copy", async () => {

@@ -911,6 +911,7 @@ remediation always remains first.
 
 GPT may reorder only the resulting target-aware allowlisted actions. It cannot
 add, remove, or alter the deterministic action candidates.
+The payload names these candidates in `candidateActions`, and the structured-output schema accepts only those codes, each exactly once. A proposal outside that set fails the scan, so the provider must enforce the constraint and not only the prompt.
 
 ## External-service diagnostics
 
