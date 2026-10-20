@@ -649,10 +649,40 @@ Acceptance:
   distinguish the hosted public scan from the local-first edition. The hosted
   public scan receives no private-repository or local-filesystem access.
 
+### [done] C.1 Chaos: off-contract model output
+
+Seeded fuzz of 300 proposals (reordered, fewer, unknown code, duplicate, extra, empty, `parsed: null`) in [`src/lib/ai/synthesis.chaos.test.ts`](./src/lib/ai/synthesis.chaos.test.ts). Invariant: a valid permutation of the candidates, or a clean `MandatorySynthesisError` with exactly one terminal diagnostic event. Mutation-checked against a lenient validator.
+
+### [done] C.2 Chaos: live production canary
+
+[`scripts/canary.mjs`](./scripts/canary.mjs) runs one real demo scan; [`.github/workflows/canary.yml`](./.github/workflows/canary.yml) runs it daily and on demand. It catches model-contract drift that fake-model tests cannot see (the 2026-10-20 production 503). Set the `VERCEL_AUTOMATION_BYPASS_SECRET` repository secret if production gets Deployment Protection (see D.1).
+
+### [done] C.3 Chaos: provider time faults against the route budget
+
+Found and fixed: acquisition (90 s) plus synthesis (45 s, plus one 8 s attempt) could exceed the route's `maxDuration` of 120 s, so the platform could stop the function before cleanup. The route now passes one request deadline (`REQUEST_BUDGET_MS`, 110 s) into synthesis, and each attempt is capped to the remaining time. Seeded fuzz of 300 fault sequences (hang, 429 with any `Retry-After`, 5xx, connection reset, slow success) checks the deadline, the attempt limit and one terminal event. Mutation-checked.
+
+### [ ] C.4 Chaos: hostile repository archive
+
+Inject truncated gzip, `../` and symlink escapes, a decompression bomb, 100k tiny files, one huge file, and file names with `( [ .`, newlines and non-ASCII characters into acquisition. Acceptance: a bounded partial scan or a clean error, the temporary directory is always removed, and no path reaches the report or logs.
+
+### [ ] C.5 Chaos: GitHub failures
+
+Inject 404 and private repository, 403 rate limit, a redirect to another host, a slow-drip body, a connection reset mid-download, and a false `Content-Length`. Acceptance: specific error codes, no request to a non-GitHub host, temporary data removed.
+
+### [ ] C.6 Chaos: cancellation at random points
+
+Abort the NDJSON stream at random points during acquisition, analysis and a synthesis retry wait. Acceptance: the temporary directory is removed, the OpenAI request is aborted, and no unhandled rejection occurs.
+
+### [ ] C.7 Chaos: concurrent scans on one instance
+
+Run 20 scans in parallel in one process, as Fluid Compute does. Acceptance: no data from one scan in another report, no temporary-directory collision, and peak memory under the function limit.
+
 ### [ ] D.1 Satisfy the public-deployment security gate
 
 This is conditional work. The local hackathon MVP remains the current product
 boundary.
+
+**Current exposure (2026-10-20):** the production alias `scaleproof-six.vercel.app` answers `POST /api/analyze` without authentication. Vercel Standard Protection covers preview and generated URLs, not the production domain. Any caller can trigger a GitHub download and a paid OpenAI request, and the route has no rate limit. Either enable protection for production or implement the rate and cost controls of the production gate first.
 
 Implementation:
 

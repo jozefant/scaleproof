@@ -1,0 +1,36 @@
+name: Production canary
+
+# One real demo scan per day against production. Unit tests use a fake
+# model, so only a live request can detect a change in the model contract.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Run demo scan against production
+        env:
+          CANARY_URL: ${{ vars.CANARY_URL || 'https://scaleproof-six.vercel.app' }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: node ./scripts/canary.mjs

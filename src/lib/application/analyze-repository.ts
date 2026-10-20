@@ -24,6 +24,8 @@ export interface AnalyzeRepositoryOptions {
   onSynthesisRetry?: SynthesisRetryHandler;
   signal?: AbortSignal;
   diagnostics?: ExternalServiceDiagnostics;
+  /** Absolute time (epoch ms) when the caller's request budget ends. */
+  deadlineAt?: number;
 }
 
 function throwIfCancelled(signal?: AbortSignal): void {
@@ -76,6 +78,7 @@ export async function analyzeRepository(
     : await synthesizeFounderActions(synthesisInput, {
         onRetry: options.onSynthesisRetry,
         diagnostics: options.diagnostics,
+        deadlineAt: options.deadlineAt,
       });
 
   return parseAnalysisReport({

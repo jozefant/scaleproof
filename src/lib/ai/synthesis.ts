@@ -130,6 +130,13 @@ export interface SynthesisDependencies {
   random?: () => number;
   onRetry?: (attempt: number, delayMs: number) => void;
   diagnostics?: ExternalServiceDiagnostics;
+  /**
+   * Absolute time (epoch ms) when the caller's own budget ends. Synthesis
+   * stops at this time or at its own deadline, whichever comes first.
+   */
+  deadlineAt?: number;
+  /** Creates the per-attempt timeout signal. Tests replace it with a fake clock. */
+  timeoutSignal?: (milliseconds: number) => AbortSignal;
 }
 
 export type SynthesisRetryHandler = NonNullable<
@@ -334,8 +341,8 @@ async function sleepWithAbort(milliseconds: number, signal?: AbortSignal): Promi
   throwIfCancelled(signal);
 }
 
-function attemptSignal(signal?: AbortSignal): AbortSignal {
-  return AbortSignal.any([signal, AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)].filter(
+function attemptSignal(timeout: AbortSignal, signal?: AbortSignal): AbortSignal {
+  return AbortSignal.any([signal, timeout].filter(
     (candidate): candidate is AbortSignal => Boolean(candidate),
   ));
 }
@@ -375,12 +382,38 @@ export async function synthesizeFounderActions(
   const sleep = dependencies.sleep ?? sleepWithAbort;
   const now = dependencies.now ?? Date.now;
   const random = dependencies.random ?? Math.random;
-  const deadline = now() + SYNTHESIS_DEADLINE_MS;
+  const timeoutSignal = dependencies.timeoutSignal ?? AbortSignal.timeout;
+  const deadline = Math.min(
+    now() + SYNTHESIS_DEADLINE_MS,
+    dependencies.deadlineAt ?? Number.POSITIVE_INFINITY,
+  );
 
   for (let attempt = 1; attempt <= MAX_SYNTHESIS_ATTEMPTS; attempt += 1) {
+    // An attempt never runs past the deadline, so the caller's budget holds
+    // even when the provider hangs on the last attempt.
+    const remaining = deadline - now();
+    if (remaining <= 0) {
+      diagnostics.terminal({
+        provider: "openai",
+        operation: "action_prioritization",
+        attempt,
+        durationMs: Math.max(0, now() - startedAt),
+        outcome: "failure",
+        statusClass: httpStatusClass(null),
+        providerErrorCode: "timeout",
+        retryDecision: "deadline_exceeded",
+      });
+      throw new MandatorySynthesisError(
+        "synthesis_unavailable",
+        "OpenAI could not complete mandatory synthesis before the scan deadline. Try again.",
+      );
+    }
     try {
       throwIfCancelled(input.signal);
-      const response = await requestProposal(built.payload, attemptSignal(input.signal));
+      const response = await requestProposal(
+        built.payload,
+        attemptSignal(timeoutSignal(Math.min(ATTEMPT_TIMEOUT_MS, remaining)), input.signal),
+      );
       throwIfCancelled(input.signal);
       if (!response.parsed) {
         throw unusableResponse("GPT-5.6 returned no usable structured result.");
