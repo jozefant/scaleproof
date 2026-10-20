@@ -41,6 +41,7 @@ import {
 const SYNTHETIC_API_KEY = "test-key-not-a-credential";
 
 const PAYLOAD_KEYS = [
+  "candidateActions",
   "confidence",
   "context",
   "domains",

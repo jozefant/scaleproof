@@ -41,6 +41,24 @@ const FounderActionsSchema = z.object({
   actions: z.array(ActionSchema).min(1).max(3),
 });
 
+/**
+ * The model may only reorder the deterministic actions. The response schema
+ * enforces that contract on the provider side: every code must be one of the
+ * candidates, and the response must contain exactly as many codes.
+ */
+export function proposalSchemaFor(candidateActions: readonly string[]) {
+  if (candidateActions.length === 0) return FounderActionsSchema;
+  return z.object({
+    actions: z
+      .array(
+        z.object({
+          remediationCode: z.enum(candidateActions as [string, ...string[]]),
+        }),
+      )
+      .length(candidateActions.length),
+  });
+}
+
 export interface SynthesisInput {
   verdict: Verdict;
   score: number;
@@ -77,6 +95,8 @@ interface ModelPayload {
   growth: GrowthAssessment;
   findings: AllowlistedFinding[];
   passCounts: Record<string, number>;
+  /** Remediation codes of the deterministic actions, in deterministic order. */
+  candidateActions: string[];
 }
 
 const SYSTEM_INSTRUCTIONS = `
@@ -84,9 +104,9 @@ You write the final three action priorities for a busy startup founder.
 Use only the allowlisted categorical JSON. You have no repository text.
 Do not change the deterministic verdict or score. Do not invent evidence,
 technologies, file names, people, legal compliance, or throughput guarantees.
-Select at most three different remediation codes. Put critical and high risks
-first, then choose the actions with the most leverage for 10x/100x user growth
-or parallel engineering work. Return remediation codes only; displayed titles,
+Return every remediation code in candidateActions exactly once, and no other
+code. Order them by priority: critical and high risks first, then the actions
+with the most leverage for 10x/100x user growth or parallel engineering work. Return remediation codes only; displayed titles,
 rationales, severity, sources, and verification remain deterministic.
 The report is an automated snapshot, not an audit.
 `.trim();
@@ -192,6 +212,7 @@ export function buildAllowlistedPayload(input: SynthesisInput): {
     growth: input.growth,
     findings: [],
     passCounts,
+    candidateActions: input.fallbackActions.map((action) => action.remediationCode),
   };
 
   const inputBudget =
@@ -486,7 +507,10 @@ async function requestOpenAiProposal(
         },
       ],
       text: {
-        format: zodTextFormat(FounderActionsSchema, "scaleproof_actions"),
+        format: zodTextFormat(
+          proposalSchemaFor(payload.candidateActions),
+          "scaleproof_actions",
+        ),
       },
     },
     { signal },
