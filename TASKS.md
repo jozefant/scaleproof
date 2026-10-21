@@ -39,7 +39,7 @@ rather than reopening the accepted task.
    `unknown`/`withheld` silently inherited a specific target's preference list
    would still pass, because the current assertion only shows they differ from
    `engineering_team` and match each other.
-2. `playwright.config.ts` sets `reuseExistingServer: !process.env.CI`. Locally,
+2. [done 2026-10-21: `reuseExistingServer: false`] `playwright.config.ts` sets `reuseExistingServer: !process.env.CI`. Locally,
    an already-running `next dev` on port 3100 without `PLAYWRIGHT_TEST=1` and
    with a real ambient `OPENAI_API_KEY` would be reused, and the browser suite
    would reach the live provider. The failure mode is a red test rather than
@@ -682,7 +682,7 @@ Run 20 scans in parallel in one process, as Fluid Compute does. Acceptance: no d
 This is conditional work. The local hackathon MVP remains the current product
 boundary.
 
-**Current exposure (2026-10-20):** the production alias `scaleproof-six.vercel.app` answers `POST /api/analyze` without authentication. Vercel Standard Protection covers preview and generated URLs, not the production domain. Any caller can trigger a GitHub download and a paid OpenAI request, and the route has no rate limit. Either enable protection for production or implement the rate and cost controls of the production gate first.
+Decision 2026-10-21: Scaleproof stays a protected demo, so this task stays deferred. The production domain was open to anonymous requests until 2026-10-21. Vercel Authentication now covers all deployments (see [`vercel-setup.md`](./vercel-setup.md)), and an anonymous request returns `401`.
 
 Implementation:
 

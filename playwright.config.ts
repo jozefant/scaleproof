@@ -21,7 +21,9 @@ export default defineConfig({
       OPENAI_API_KEY: "",
       PLAYWRIGHT_TEST: "1",
     },
-    reuseExistingServer: !process.env.CI,
+    // A reused server may be a developer `next dev` with a real key, so the
+    // suite always starts its own blanked-key server.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [
