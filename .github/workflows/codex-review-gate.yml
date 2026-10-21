@@ -38,7 +38,10 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const CODEX = /codex/i;
+            // Only the Codex app may unlock the gate. A user login cannot end in
+            // "[bot]", so an exact match on login and account type is not spoofable.
+            const CODEX_LOGIN = "chatgpt-codex-connector[bot]";
+            const isCodex = (user) => user?.login === CODEX_LOGIN && user?.type === "Bot";
             const MARKER = /codex-review-state:v1 (\{.*?\}\}) -->/s;
             const POLL_MS = 30_000;
             const POLL_LIMIT_MS = 15 * 60_000;
@@ -51,7 +54,7 @@ jobs:
                 owner, repo, issue_number: number, per_page: 100,
               });
               const states = comments
-                .filter((comment) => CODEX.test(comment.user?.login ?? ""))
+                .filter((comment) => isCodex(comment.user))
                 .map((comment) => MARKER.exec(comment.body ?? "")?.[1])
                 .filter(Boolean)
                 .map((json) => { try { return JSON.parse(json); } catch { return null; } })
@@ -61,7 +64,7 @@ jobs:
                 owner, repo, issue_number: number, per_page: 100,
               });
               const approved = reactions.some(
-                (reaction) => CODEX.test(reaction.user?.login ?? "") && reaction.content === "+1",
+                (reaction) => isCodex(reaction.user) && reaction.content === "+1",
               );
               return { pr, completed, approved };
             }
@@ -92,7 +95,9 @@ jobs:
                 await setStatus(pr.head.sha, "pending", "Draft: Codex reviews when the pull request is ready");
                 return;
               }
-              if (context.eventName !== "pull_request" || Date.now() - started > POLL_LIMIT_MS) {
+              // Every run polls. A newer run cancels an older one, and a reaction
+              // starts no workflow, so the newest run must watch for it.
+              if (Date.now() - started > POLL_LIMIT_MS) {
                 await setStatus(
                   pr.head.sha,
                   "pending",
