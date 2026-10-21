@@ -1,6 +1,6 @@
 # Vercel Hobby protected deployment
 
-Updated: 2026-07-21
+Updated: 2026-10-21
 
 Scaleproof may use either a Preview or Production deployment target for the
 controlled hackathon demo. The security boundary is Vercel Deployment
@@ -96,6 +96,10 @@ with `NEXT_PUBLIC_`. Environment changes apply only to later deployments.
 In **Settings -> Deployment Protection**, enable Vercel Authentication and keep
 the selected protection method active. Invited testers need an authorized
 Vercel account or a revocable shareable link.
+
+Set the Vercel Authentication scope to **All Deployments** (API: `ssoProtection.deploymentType = "all"`). **Standard Protection** (`all_except_custom_domains`) leaves the production domain `scaleproof-six.vercel.app` open: on 2026-10-20 it answered `POST /api/analyze` without authentication. An anonymous request to the production domain must return HTTP `401`.
+
+The daily [production canary](./.github/workflows/canary.yml) passes protection with the project's **Protection Bypass for Automation** secret, stored as the GitHub Actions secret `VERCEL_AUTOMATION_BYPASS_SECRET`. Rotating the bypass in Vercel requires updating that secret.
 
 ## 4. Deploy
 

@@ -83,6 +83,10 @@ async function main() {
     );
     return 1;
   }
+  if (response.status === 401 || response.status === 403) {
+    log("Deployment Protection blocked the request. Check VERCEL_AUTOMATION_BYPASS_SECRET.");
+    return 1;
+  }
   if (response.status !== 200) {
     // The route returns fixed, privacy-safe error strings.
     log(`error: ${typeof body?.error === "string" ? body.error : "no error message"}`);
