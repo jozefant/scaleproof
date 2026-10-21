@@ -55,9 +55,15 @@ Function output trace:
 
 ```ts
 outputFileTracingExcludes: {
-  "/api/analyze": ["./.next/lock", "./.next/dev/**/*"],
+  "/api/analyze": [
+    "./.next/lock",
+    "./.next/dev/**/*",
+    "./.next/export-detail.json",
+  ],
 },
 ```
+
+Next.js 16.3 references `.next/export-detail.json` in the route trace but does not write it. Without the third entry, Vercel packaging fails with the same `ENOENT` as `.next/lock`.
 
 Run:
 

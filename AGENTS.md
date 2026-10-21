@@ -144,6 +144,16 @@ Use this protocol when an implementer and reviewer hand off a `TASKS.md` item:
    repository acquisition through analysis and safe evidence—not detector logic
    alone. Do not scan a real repository unless the user explicitly requests it.
 
+### Pull request merge gate
+
+A ruleset on `main` enforces this; the [Codex review gate](./.github/workflows/codex-review-gate.yml) posts the required `codex-review` status.
+
+1. Merge only through a pull request. `verify` and `codex-review` must pass, and every review thread must be resolved.
+2. Codex reviews one to three minutes after a pull request opens, often after CI passes. A green CI is not a reason to merge. Wait for `codex-review`.
+3. For each Codex finding, either fix it in the same pull request with a test, or file it in `TASKS.md` and link the comment. Then reply on the thread with what was done, and resolve it.
+4. A push after the review does not trigger a new review. For a substantial change, comment `@codex review`.
+5. An admin may bypass the gate only when Codex is unavailable. Record the reason in the pull request.
+
 ## Handoff checklist
 
 - Scope still matches the hackathon boundary.

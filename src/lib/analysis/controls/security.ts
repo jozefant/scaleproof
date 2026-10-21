@@ -66,7 +66,12 @@ const SERVER_AUTHORIZATION_ENFORCEMENT = [
   /\b(?:hasRole|hasAnyRole|hasAuthority|hasAnyAuthority|hasPermission|checkPermission|checkAccess|requirePermission|requireRole|requireAdmin|requireOwner|assertPermission|ensurePermission|authorizeRequest|isAuthorized|canAccess)\s*\(/i,
   /\b(?:ability|abilities|acl|casbin|enforcer|policy|policies|guard)\s*\.\s*(?:can|cannot|enforce|check|authorize|allows?)\s*\(/i,
   /\b(?:permission_required|user_passes_test|has_perm|require_permissions?)\s*\(/i,
-  /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:role|roles|permissions|scopes|isAdmin|is_admin|app_metadata)\b/,
+  // A role-shaped property counts only inside an access decision. A read that
+  // is returned, logged, or copied decides nothing.
+  /\b(?:if|elif|while|unless)\s*\(?\s*(?:!|not\s+)*\s*(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:isAdmin|is_admin)\b/,
+  /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:app_metadata\??\.)?(?:role|roles|permissions|scopes|isAdmin|is_admin)\s*(?:===|!==|==|!=)/,
+  /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:isAdmin|is_admin)\s*(?:&&|\|\||\?(?![.?]))/,
+  /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:roles|permissions|scopes)\??\.(?:includes|some|has|indexOf)\s*\(/,
   /\b(?:role|roles|permissions|scope|scopes)\s*(?:===|!==|==|!=)\s*['"`]/,
   /\b(?:role|roles|permissions|scopes)\s*\.\s*includes\s*\(/,
 ];

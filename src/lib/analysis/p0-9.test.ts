@@ -443,6 +443,10 @@ const AUTHORIZATION_ENFORCEMENT: Array<[string, string]> = [
   ["a scope list", '  if (scopes.includes("items.write")) { }'],
   ["an authority check", '  if (!hasAuthority("ITEMS_WRITE")) return null;'],
   ["an ownership assertion", '  assertPermission(caller, "items", record.owner);'],
+  ["an admin flag condition", "  if (!user.isAdmin) return NextResponse.json({}, { status: 403 });"],
+  ["a role compared with a constant", '  if (session.user.role !== Role.Editor) throw new Error("forbidden");'],
+  ["an admin flag guard expression", "  const allowed = user.isAdmin && record.ownerId === user.id;"],
+  ["a permission set lookup", '  if (!token.permissions.has("items:write")) return null;'],
 ];
 
 const NON_AUTHORIZATION_FORMS: Array<[string, string]> = [
@@ -452,6 +456,10 @@ const NON_AUTHORIZATION_FORMS: Array<[string, string]> = [
   ["a role-shaped string constant", '  const roles = "admin,editor";'],
   ["a documentation path", '  const permissionsDoc = "docs/permissions.md";'],
   ["an rbac word in a variable name", "  const rbacMigrationPending = true;"],
+  ["a role returned in a response", "  return NextResponse.json({ role: user.role });"],
+  ["a role written to a log", '  console.log("caller role", session.role);'],
+  ["permissions copied into a variable", "  const permissions = claims.permissions;"],
+  ["an admin flag serialized", "  const body = { isAdmin: user.isAdmin, scopes: token.scopes };"],
 ];
 
 describe("P0.9 security.authorization requires an enforceable server operation", () => {

@@ -335,22 +335,22 @@ export function reconcileActionProposal(
   const deterministicByCode = new Map(
     deterministicActions.map((action) => [action.remediationCode, action]),
   );
-  const proposedCodes = proposal.map((action) => action.remediationCode);
-  if (proposal.length !== deterministicActions.length) {
-    return null;
-  }
-  if (new Set(proposedCodes).size !== proposedCodes.length) {
-    return null;
-  }
+  // The model can only reorder. A repeated code adds nothing, so the first
+  // occurrence wins; the provider schema cannot forbid repeats. Candidates
+  // that the proposal leaves out are appended in deterministic order below.
+  const proposedCodes = [
+    ...new Set(proposal.map((action) => action.remediationCode)),
+  ];
   if (
+    proposedCodes.length === 0 ||
     proposedCodes.some((code) => !deterministicByCode.has(code)) ||
     [...mandatoryCodes].some((code) => !proposedCodes.includes(code))
   ) {
     return null;
   }
 
-  const reconciled = proposal.flatMap((modelAction) => {
-    const deterministic = deterministicByCode.get(modelAction.remediationCode);
+  const reconciled = proposedCodes.flatMap((code) => {
+    const deterministic = deterministicByCode.get(code);
     return deterministic ? [deterministic] : [];
   });
   for (const action of deterministicActions) {

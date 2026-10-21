@@ -153,15 +153,6 @@ describe("OpenAI synthesis boundary", () => {
       name: "unknown remediation",
       parsed: { actions: [{ remediationCode: "unknown-code" }] },
     },
-    {
-      name: "duplicated remediation",
-      parsed: {
-        actions: [
-          { remediationCode: "remove-exposed-secret" },
-          { remediationCode: "remove-exposed-secret" },
-        ],
-      },
-    },
   ])("fails closed without retrying locally rejected $name", async ({ parsed }) => {
     const input = synthesisInput();
     const requestProposal = vi.fn(async () => ({

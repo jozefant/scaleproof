@@ -84,30 +84,57 @@ async function demoInput(): Promise<SynthesisInput> {
   };
 }
 
-/** A fake clock. Waiting and timeouts move time instead of using it. */
+/**
+ * A fake clock. Waiting moves time instead of using it, and a timeout signal
+ * aborts when the clock passes its due time, as `AbortSignal.timeout` does.
+ */
 function fakeClock(start = 1_000_000) {
   let time = start;
   let attemptTimeoutMs = Number.POSITIVE_INFINITY;
+  const timers: Array<{ dueAt: number; controller: AbortController }> = [];
+  const advance = (milliseconds: number) => {
+    time += milliseconds;
+    for (const timer of timers) {
+      if (timer.dueAt <= time && !timer.controller.signal.aborted) {
+        timer.controller.abort(new DOMException("The attempt timed out.", "TimeoutError"));
+      }
+    }
+  };
   return {
     start,
     now: () => time,
-    advance: (milliseconds: number) => {
-      time += milliseconds;
-    },
+    advance,
     get attemptTimeoutMs() {
       return attemptTimeoutMs;
     },
     dependencies: {
       now: () => time,
       sleep: async (milliseconds: number) => {
-        time += milliseconds;
+        advance(milliseconds);
       },
       timeoutSignal: (milliseconds: number) => {
         attemptTimeoutMs = milliseconds;
-        return new AbortController().signal;
+        const controller = new AbortController();
+        timers.push({ dueAt: time + milliseconds, controller });
+        return controller.signal;
       },
     } satisfies Partial<SynthesisDependencies>,
   };
+}
+
+/**
+ * A provider request that never answers. It settles only when the signal that
+ * synthesis passes to the provider aborts. If synthesis does not pass its
+ * timeout signal, the request stays pending and the test times out.
+ */
+function hangUntilAborted(
+  clock: ReturnType<typeof fakeClock>,
+  signal: AbortSignal | undefined,
+): Promise<never> {
+  return new Promise((_, reject) => {
+    signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    clock.advance(clock.attemptTimeoutMs);
+  });
 }
 
 function proposal(codes: string[]) {
@@ -164,11 +191,21 @@ describe("chaos: off-contract model output", () => {
 
       const label = `seed ${seed} (${shape})`;
       expect(events.count(), label).toBe(1);
-      if (shape === "reordered") {
+      // The contract: only candidate codes, every mandatory code, at least one code.
+      const usable =
+        codes !== null &&
+        codes.length > 0 &&
+        codes.every((code) => candidates.includes(code)) &&
+        [...mandatory].every((code) => codes.includes(code));
+      if (usable) {
         expect(outcome.ok, label).toBe(true);
         if (!outcome.ok) continue;
         const returned = outcome.result.actions.map((action) => action.remediationCode);
-        expect(returned, label).toEqual(codes);
+        const proposed = [...new Set(codes)];
+        expect(returned, label).toEqual([
+          ...proposed,
+          ...candidates.filter((code) => !proposed.includes(code)),
+        ]);
         expect([...returned].sort(), label).toEqual([...candidates].sort());
         expect(outcome.result.actions.map((action) => action.rank), label).toEqual(
           returned.map((_, index) => index + 1),
@@ -191,7 +228,7 @@ describe("chaos: provider time faults", () => {
   type Fault = "hang" | "rateLimited" | "serverError" | "connectionReset" | "slowSuccess";
   const FAULTS: readonly Fault[] = ["hang", "rateLimited", "serverError", "connectionReset", "slowSuccess"];
 
-  it(`never runs past the synthesis or caller deadline for ${SCENARIOS} random fault sequences`, async () => {
+  it(`never runs past the synthesis or caller deadline for ${SCENARIOS} random fault sequences`, { timeout: 15_000 }, async () => {
     const input = await demoInput();
     const candidates = input.fallbackActions.map((action) => action.remediationCode);
 
@@ -215,17 +252,14 @@ describe("chaos: provider time faults", () => {
         random,
         deadlineAt,
         diagnostics: events.diagnostics,
-        requestProposal: async () => {
+        requestProposal: async (_payload, signal) => {
           attempts += 1;
           const fault = pick(random, FAULTS);
           if (fault === "slowSuccess") {
             clock.advance(Math.floor(random() * clock.attemptTimeoutMs * 0.9));
             return proposal(candidates);
           }
-          if (fault === "hang") {
-            clock.advance(clock.attemptTimeoutMs);
-            throw new DOMException("The attempt timed out.", "TimeoutError");
-          }
+          if (fault === "hang") return hangUntilAborted(clock, signal);
           if (fault === "rateLimited") {
             const retryAfter = pick(random, [undefined, "1", "30", "3600"]);
             throw Object.assign(new Error("rate limited"), {
@@ -253,7 +287,7 @@ describe("chaos: provider time faults", () => {
     }
   });
 
-  it("stops inside the remaining route budget when every attempt hangs after a slow acquisition", async () => {
+  it("stops inside the remaining route budget when every attempt hangs after a slow acquisition", { timeout: 15_000 }, async () => {
     const input = await demoInput();
     const clock = fakeClock();
     // Acquisition used 90 of the 110 budget seconds.
@@ -264,10 +298,7 @@ describe("chaos: provider time faults", () => {
         ...clock.dependencies,
         random: () => 0.5,
         deadlineAt,
-        requestProposal: async () => {
-          clock.advance(clock.attemptTimeoutMs);
-          throw new DOMException("The attempt timed out.", "TimeoutError");
-        },
+        requestProposal: (_payload, signal) => hangUntilAborted(clock, signal),
       }),
     ).rejects.toBeInstanceOf(MandatorySynthesisError);
     expect(clock.now()).toBeLessThanOrEqual(deadlineAt);
