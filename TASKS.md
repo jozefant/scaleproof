@@ -435,7 +435,7 @@ From the [Codex review on #33](https://github.com/jozefant/scaleproof/pull/33). 
 
 Frozen matrix (`src/lib/analysis/p0-9.test.ts`, handler seam through `evaluateControls`): passes on an admin-flag condition, a role compared with a constant, an admin-flag guard expression, and a permission-set lookup; stays `unknown`/`absent` for a role returned in a response, a role written to a log, permissions copied into a variable, and an admin flag serialized. Every earlier P0.9 row still holds. Mutation: restoring the bare-read pattern fails the four negative rows.
 
-**Ready for review** (2026-10-21). Heuristic `0.8.12-hackathon`.
+**Ready for review** (2026-10-21). Heuristic `0.8.12`. Rows for nested receivers (`session.user.isAdmin`, `req.user.isAdmin`) added after the [Codex review on #37](https://github.com/jozefant/scaleproof/pull/37).
 
 ### [ ] P1.6 Keep documentation and non-production files out of two profile signals
 

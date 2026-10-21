@@ -444,6 +444,8 @@ const AUTHORIZATION_ENFORCEMENT: Array<[string, string]> = [
   ["an authority check", '  if (!hasAuthority("ITEMS_WRITE")) return null;'],
   ["an ownership assertion", '  assertPermission(caller, "items", record.owner);'],
   ["an admin flag condition", "  if (!user.isAdmin) return NextResponse.json({}, { status: 403 });"],
+  ["a session admin flag condition", "  if (!session.user.isAdmin) return NextResponse.json({}, { status: 403 });"],
+  ["a request admin flag condition", "  if (!req.user.isAdmin) return NextResponse.json({}, { status: 403 });"],
   ["a role compared with a constant", '  if (session.user.role !== Role.Editor) throw new Error("forbidden");'],
   ["an admin flag guard expression", "  const allowed = user.isAdmin && record.ownerId === user.id;"],
   ["a permission set lookup", '  if (!token.permissions.has("items:write")) return null;'],

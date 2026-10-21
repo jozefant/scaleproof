@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.12-hackathon`
+Version: `0.8.12`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
