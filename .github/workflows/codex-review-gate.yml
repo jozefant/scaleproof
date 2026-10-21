@@ -1,0 +1,112 @@
+name: Codex review gate
+
+# Posts the `codex-review` commit status that the `main` ruleset requires.
+# Codex reviews a pull request one to three minutes after it opens, which is
+# often after CI passes. Without this gate a pull request can merge before its
+# review exists. The status is pending until the pull request has a completed
+# Codex review (its summary marker) or a Codex thumbs-up (no findings). The
+# ruleset separately requires every review thread to be resolved.
+#
+# The workflow reads comments and reactions through the API only. It does not
+# check out or run pull request code.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  statuses: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # The job name must differ from the required `codex-review` status. A run
+    # cancelled by a newer run would otherwise count as a failed required check.
+    name: codex-review-gate
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Set the codex-review status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Only the Codex app may unlock the gate. A user login cannot end in
+            // "[bot]", so an exact match on login and account type is not spoofable.
+            const CODEX_LOGIN = "chatgpt-codex-connector[bot]";
+            const isCodex = (user) => user?.login === CODEX_LOGIN && user?.type === "Bot";
+            const MARKER = /codex-review-state:v1 (\{.*?\}\}) -->/s;
+            const POLL_MS = 30_000;
+            const POLL_LIMIT_MS = 15 * 60_000;
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request?.number ?? context.payload.issue.number;
+
+            async function evaluate() {
+              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              const states = comments
+                .filter((comment) => isCodex(comment.user))
+                .map((comment) => MARKER.exec(comment.body ?? "")?.[1])
+                .filter(Boolean)
+                .map((json) => { try { return JSON.parse(json); } catch { return null; } })
+                .filter(Boolean);
+              const completed = states.find((state) => state.code_review?.status === "completed");
+              const reactions = await github.paginate(github.rest.reactions.listForIssue, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              const approved = reactions.some(
+                (reaction) => isCodex(reaction.user) && reaction.content === "+1",
+              );
+              return { pr, completed, approved };
+            }
+
+            async function setStatus(sha, state, description) {
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha, state, context: "codex-review",
+                description: description.slice(0, 140),
+              });
+              core.info(`${state}: ${description}`);
+            }
+
+            const started = Date.now();
+            for (;;) {
+              const { pr, completed, approved } = await evaluate();
+              if (completed || approved) {
+                const findings = completed?.code_review?.has_any_findings;
+                await setStatus(
+                  pr.head.sha,
+                  "success",
+                  findings
+                    ? "Codex review complete with findings; resolve every thread before merging"
+                    : "Codex review complete",
+                );
+                return;
+              }
+              if (pr.draft) {
+                await setStatus(pr.head.sha, "pending", "Draft: Codex reviews when the pull request is ready");
+                return;
+              }
+              // Every run polls. A newer run cancels an older one, and a reaction
+              // starts no workflow, so the newest run must watch for it.
+              if (Date.now() - started > POLL_LIMIT_MS) {
+                await setStatus(
+                  pr.head.sha,
+                  "pending",
+                  "Waiting for Codex review. Comment '@codex review' to request one; an admin can bypass if Codex is down",
+                );
+                return;
+              }
+              await setStatus(pr.head.sha, "pending", "Waiting for Codex review");
+              await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+            }

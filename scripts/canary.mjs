@@ -72,19 +72,22 @@ async function main() {
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
   log(`status ${response.status} in ${seconds}s`);
 
+  // Vercel answers a blocked request with a redirect, 401 or 403, often as an
+  // HTML page. Check the status before the body is parsed as JSON.
+  if (
+    response.status === 401 ||
+    response.status === 403 ||
+    (response.status >= 300 && response.status < 400)
+  ) {
+    log("Deployment Protection blocked the request. Check VERCEL_AUTOMATION_BYPASS_SECRET.");
+    return 1;
+  }
+
   let body;
   try {
     body = await response.json();
   } catch {
-    log(
-      response.status === 401 || (response.status >= 300 && response.status < 400)
-        ? "the response is not JSON; Deployment Protection probably blocked the request."
-        : "the response is not JSON.",
-    );
-    return 1;
-  }
-  if (response.status === 401 || response.status === 403) {
-    log("Deployment Protection blocked the request. Check VERCEL_AUTOMATION_BYPASS_SECRET.");
+    log("the response is not JSON.");
     return 1;
   }
   if (response.status !== 200) {

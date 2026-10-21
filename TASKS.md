@@ -416,7 +416,7 @@ after an unrelated edit.
    merely mentioning "rate limit" can satisfy `security.provider-abuse-guard`.
    It also still uses the pre-P0.9-fix `isProductionExecutionFile &&
    isServerSurfaceFile` shape, so a rate limiter living only in
-   `src/lib/rate-limit.ts` is missed. The failure mode is a missed pass on an
+   `src/lib/rate-limit.ts` is missed. Confirmed independently by the [Codex review on #33](https://github.com/jozefant/scaleproof/pull/33). The failure mode is a missed pass on an
    evidence-gap control, not a security downgrade.
    The PR #33 review found concrete false passes that make this a security issue: the default `supabase/config.toml` has `[auth.rate_limit]`, which passes `security.provider-abuse-guard`. `.github/dependabot.yml` with `open-pull-requests-limit: 10` passes `security.provider-io-bounds`. Guard files need a role check and provider relevance.
 
@@ -428,6 +428,23 @@ test row; no P0.8 or P0.9 outcome changes.
 Raised by the PR #33 review. A server-execution root must first pass `isProductionExecutionFile`, which needs reachability from `isSourceEntryPoint` in [`src/lib/analysis/file-roles.ts`](./src/lib/analysis/file-roles.ts). `isSourceEntryPoint` excludes `pages/api/` and does not know Express-style entries such as `src/app.ts` or `src/server.ts`. A pages-router `pages/api/admin.ts` that calls `requireRole(` and an LLM provider is unreachable. `security.authorization` then reports missing enforcement, and the provider controls become `not_applicable`.
 
 Acceptance: `pages/api/**` and the common Node server entry files are roots, pinned by synthetic fixtures; the P0.9 and P0.10 acceptance matrices still hold.
+
+### [ ] P0.18 Count a role property only inside an access decision
+
+From the [Codex review on #33](https://github.com/jozefant/scaleproof/pull/33). `security.authorization` passed on any read of `user.role`, `claims.permissions` or `user.isAdmin`, including `return { role: user.role }`. This was a false pass on a security control. A role-shaped property now counts only in a condition, a negation, a comparison (also with a constant such as `Role.Editor`), or a membership test.
+
+Frozen matrix (`src/lib/analysis/p0-9.test.ts`, handler seam through `evaluateControls`): passes on an admin-flag condition, a role compared with a constant, an admin-flag guard expression, and a permission-set lookup; stays `unknown`/`absent` for a role returned in a response, a role written to a log, permissions copied into a variable, and an admin flag serialized. Every earlier P0.9 row still holds. Mutation: restoring the bare-read pattern fails the four negative rows.
+
+**Ready for review** (2026-10-21). Heuristic `0.8.12`. Rows for nested receivers (`session.user.isAdmin`, `req.user.isAdmin`) added after the [Codex review on #37](https://github.com/jozefant/scaleproof/pull/37).
+
+### [ ] P1.6 Keep documentation and non-production files out of two profile signals
+
+From the [Codex review on #33](https://github.com/jozefant/scaleproof/pull/33). Both produce findings and actions that do not apply to the repository, in the false-fail direction.
+
+1. `hasDurableData` in [`src/lib/analysis/signals.ts`](./src/lib/analysis/signals.ts) searches every file, including a README. A static site whose README mentions PostgreSQL, Prisma or MongoDB loses the static-frontend profile, and server-runtime controls report missing evidence.
+2. Public-object detection in [`src/lib/analysis/external-provider.ts`](./src/lib/analysis/external-provider.ts) accepts every non-Markdown file. An upload in a test or fixture makes `res.generated-object-lifecycle` report a missing production lifecycle, which can take one of the three founder actions.
+
+Acceptance: both signals use the production-role and reachability boundary; a README mention and a test-only upload change no outcome; the P0.9, P0.10 and P1.0 matrices still hold.
 
 ### [ ] P1.4 Role-scope the configuration boundary and calibrate the non-production credential signal
 
@@ -649,17 +666,23 @@ Acceptance:
   distinguish the hosted public scan from the local-first edition. The hosted
   public scan receives no private-repository or local-filesystem access.
 
-### [done] C.1 Chaos: off-contract model output
+### [ ] C.1 Chaos: off-contract model output
 
-Seeded fuzz of 300 proposals (reordered, fewer, unknown code, duplicate, extra, empty, `parsed: null`) in [`src/lib/ai/synthesis.chaos.test.ts`](./src/lib/ai/synthesis.chaos.test.ts). Invariant: a valid permutation of the candidates, or a clean `MandatorySynthesisError` with exactly one terminal diagnostic event. Mutation-checked against a lenient validator.
+Seeded fuzz of 300 proposals (reordered, fewer, unknown code, duplicate, extra, empty, `parsed: null`) in [`src/lib/ai/synthesis.chaos.test.ts`](./src/lib/ai/synthesis.chaos.test.ts). Frozen matrix: a proposal with only candidate codes and every mandatory code succeeds as its de-duplicated order followed by the left-out candidates; any other proposal fails with a clean `MandatorySynthesisError`; every scenario emits exactly one terminal diagnostic event. Mutation-checked against a lenient validator.
 
-### [done] C.2 Chaos: live production canary
+**Ready for review** (2026-10-21). Marked `[done]` by its implementer in PR #35, which breaks the finite task-review protocol in [`AGENTS.md`](./AGENTS.md). An independent reviewer owns the transition to `[done]`.
+
+### [ ] C.2 Chaos: live production canary
 
 [`scripts/canary.mjs`](./scripts/canary.mjs) runs one real demo scan; [`.github/workflows/canary.yml`](./.github/workflows/canary.yml) runs it daily and on demand. It catches model-contract drift that fake-model tests cannot see (the 2026-10-20 production 503). Set the `VERCEL_AUTOMATION_BYPASS_SECRET` repository secret if production gets Deployment Protection (see D.1).
 
-### [done] C.3 Chaos: provider time faults against the route budget
+**Ready for review** (2026-10-21). Marked `[done]` by its implementer in PR #35, which breaks the finite task-review protocol in [`AGENTS.md`](./AGENTS.md). An independent reviewer owns the transition to `[done]`.
 
-Found and fixed: acquisition (90 s) plus synthesis (45 s, plus one 8 s attempt) could exceed the route's `maxDuration` of 120 s, so the platform could stop the function before cleanup. The route now passes one request deadline (`REQUEST_BUDGET_MS`, 110 s) into synthesis, and each attempt is capped to the remaining time. Seeded fuzz of 300 fault sequences (hang, 429 with any `Retry-After`, 5xx, connection reset, slow success) checks the deadline, the attempt limit and one terminal event. Mutation-checked.
+### [ ] C.3 Chaos: provider time faults against the route budget
+
+Found and fixed: acquisition (90 s) plus synthesis (45 s, plus one 8 s attempt) could exceed the route's `maxDuration` of 120 s, so the platform could stop the function before cleanup. The route now passes one request deadline (`REQUEST_BUDGET_MS`, 110 s) into synthesis, and each attempt is capped to the remaining time. Seeded fuzz of 300 fault sequences (hang, 429 with any `Retry-After`, 5xx, connection reset, slow success) checks the deadline, the attempt limit and one terminal event. A hang settles only when the provider's abort signal fires, so the test also proves that the timeout signal reaches the provider ([Codex review on #35](https://github.com/jozefant/scaleproof/pull/35)). Mutation-checked.
+
+**Ready for review** (2026-10-21). Marked `[done]` by its implementer in PR #35, which breaks the finite task-review protocol in [`AGENTS.md`](./AGENTS.md). An independent reviewer owns the transition to `[done]`.
 
 ### [ ] C.4 Chaos: hostile repository archive
 

@@ -114,17 +114,6 @@ describe("founder action policy", () => {
       proposal: [],
     },
     {
-      name: "duplicates a code",
-      proposal: [
-        {
-          remediationCode: "remove-exposed-secret",
-        },
-        {
-          remediationCode: "remove-exposed-secret",
-        },
-      ],
-    },
-    {
       name: "uses an unknown code",
       proposal: [
         {
@@ -141,6 +130,23 @@ describe("founder action policy", () => {
         new Set(["remove-exposed-secret"]),
       ),
     ).toBeNull();
+  });
+
+  it("collapses a repeated code instead of failing the scan", () => {
+    const checks = [
+      finding(),
+      finding({ id: "rel.load-path", remediationCode: "add-load-path", severity: "high", weight: 3 }),
+    ];
+    const deterministic = selectDeterministicActions(checks);
+    const [first, second] = deterministic.map((action) => action.remediationCode);
+    const result = reconcileActionProposal(
+      deterministic,
+      [{ remediationCode: first! }, { remediationCode: first! }],
+      new Set([first!]),
+    );
+
+    expect(result?.map((action) => action.remediationCode)).toEqual([first, second]);
+    expect(result?.map((action) => action.rank)).toEqual([1, 2]);
   });
 
   it("uses GPT only to order deterministic actions", () => {

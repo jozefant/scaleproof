@@ -1,6 +1,6 @@
 # Scaleproof scoring heuristic
 
-Version: `0.8.11-hackathon`
+Version: `0.8.12`
 
 Status: provisional. The heuristic is intentionally simple, visible, and
 versioned so it can be calibrated from feedback after the hackathon.
@@ -265,7 +265,7 @@ evaluates cannot earn server-side credit. Comments are removed before matching.
 
 | Control | Passes on | Never passes on |
 | --- | --- | --- |
-| `security.authorization` | A framework annotation or filter chain (`@PreAuthorize`, `authorizeHttpRequests`, `SecurityFilterChain`), an explicit role/permission decision (`hasRole(`, `requirePermission(`, `ability.can(`, `enforcer.enforce(`), or a verified identity used as a decision input (`session.user.role`, `claims.permissions`, `roles.includes(`) — `enforced`. A versioned policy whose predicate references the caller (`create policy … auth.uid()`, `allow read: if request.auth …`) — `inferred` | An `Authorization` request header, a comment, a log line, an authorization package in a manifest, browser-only role display, or a policy with no identity predicate |
+| `security.authorization` | A framework annotation or filter chain (`@PreAuthorize`, `authorizeHttpRequests`, `SecurityFilterChain`), an explicit role/permission decision (`hasRole(`, `requirePermission(`, `ability.can(`, `enforcer.enforce(`), or a verified identity used as a decision input (`session.user.role !== …`, `if (!user.isAdmin)`, `claims.permissions.includes(`) — `enforced`. A role property that is only returned, logged, or copied is not a decision input. A versioned policy whose predicate references the caller (`create policy … auth.uid()`, `allow read: if request.auth …`) — `inferred` | An `Authorization` request header, a comment, a log line, an authorization package in a manifest, browser-only role display, or a policy with no identity predicate |
 | `security.validation` | A parse call applied to a request-derived value (`s.parse(req.body)`, `Item.parse(await request.json())`) whatever the schema variable is named, or a recognized validation API: `safeParse(`, `parseAsync(`, `validateOrReject(`, `@Valid`, `ValidationPipe`, `validationResult(`, a Pydantic model | A validation package in a manifest, a browser form resolver, a comment, a schema module that no reachable handler parses, or a standard parser that shares the method name (`JSON.parse`, `Date.parse`, `path.parse`, `yaml.parse`) |
 
 The receiver's *name* is not part of the validation rule: requiring a
@@ -911,7 +911,7 @@ remediation always remains first.
 
 GPT may reorder only the resulting target-aware allowlisted actions. It cannot
 add, remove, or alter the deterministic action candidates.
-The payload names these candidates in `candidateActions`, and the structured-output schema accepts only those codes, each exactly once. A proposal outside that set fails the scan, so the provider must enforce the constraint and not only the prompt.
+The payload names these candidates in `candidateActions`, and the structured-output schema accepts only those codes, with exactly as many entries. The schema cannot forbid a repeated code, so a repeat is collapsed to its first position and the left-out candidates follow in deterministic order. A proposal with a code outside the candidates, or one that omits a mandatory code, fails the scan.
 
 ## External-service diagnostics
 
