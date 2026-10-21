@@ -446,6 +446,10 @@ const AUTHORIZATION_ENFORCEMENT: Array<[string, string]> = [
   ["an admin flag condition", "  if (!user.isAdmin) return NextResponse.json({}, { status: 403 });"],
   ["a session admin flag condition", "  if (!session.user.isAdmin) return NextResponse.json({}, { status: 403 });"],
   ["a request admin flag condition", "  if (!req.user.isAdmin) return NextResponse.json({}, { status: 403 });"],
+  ["an admin flag later in a compound condition", "  if (!user || !user.isAdmin) return NextResponse.json({}, { status: 403 });"],
+  ["a nested admin flag in a compound condition", "  if (!session || !session.user.isAdmin) return NextResponse.json({}, { status: 403 });"],
+  ["an admin flag in a positive compound condition", "  if (user && user.isAdmin) { await removeItem(); }"],
+  ["a Python admin flag condition", "  if not user.is_admin:"],
   ["a role compared with a constant", '  if (session.user.role !== Role.Editor) throw new Error("forbidden");'],
   ["an admin flag guard expression", "  const allowed = user.isAdmin && record.ownerId === user.id;"],
   ["a permission set lookup", '  if (!token.permissions.has("items:write")) return null;'],
@@ -462,6 +466,8 @@ const NON_AUTHORIZATION_FORMS: Array<[string, string]> = [
   ["a role written to a log", '  console.log("caller role", session.role);'],
   ["permissions copied into a variable", "  const permissions = claims.permissions;"],
   ["an admin flag serialized", "  const body = { isAdmin: user.isAdmin, scopes: token.scopes };"],
+  ["an admin flag returned after a condition", "  if (ready) return NextResponse.json({ isAdmin: user.isAdmin });"],
+  ["an admin flag passed to a call after a condition", "  if (ready) audit(user.isAdmin);"],
 ];
 
 describe("P0.9 security.authorization requires an enforceable server operation", () => {

@@ -68,7 +68,10 @@ const SERVER_AUTHORIZATION_ENFORCEMENT = [
   /\b(?:permission_required|user_passes_test|has_perm|require_permissions?)\s*\(/i,
   // A role-shaped property counts only inside an access decision. A read that
   // is returned, logged, or copied decides nothing.
-  /\b(?:if|elif|while|unless)\s*\(?\s*(?:!|not\s+)*\s*(?:[\w$]+\??\.)*(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:isAdmin|is_admin)\b/,
+  // An admin flag anywhere inside a condition, also a compound one.
+  /\b(?:if|while)\s*\((?:[^()\n]|\([^()\n]*\))*?\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:isAdmin|is_admin)\b/,
+  /^\s*(?:if|elif|while)\s+[^\n(][^\n]*?\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\.(?:isAdmin|is_admin)\b[^\n]*:\s*$/m,
+  /!\s*(?:[\w$]+\??\.)*(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:isAdmin|is_admin)\b/,
   /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:app_metadata\??\.)?(?:role|roles|permissions|scopes|isAdmin|is_admin)\s*(?:===|!==|==|!=)/,
   /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:isAdmin|is_admin)\s*(?:&&|\|\||\?(?![.?]))/,
   /\b(?:user|session|claims|principal|payload|profile|member|actor|caller|token)\??\.(?:roles|permissions|scopes)\??\.(?:includes|some|has|indexOf)\s*\(/,
