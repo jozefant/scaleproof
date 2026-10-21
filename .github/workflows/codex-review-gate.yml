@@ -28,7 +28,9 @@ concurrency:
 
 jobs:
   gate:
-    name: codex-review
+    # The job name must differ from the required `codex-review` status. A run
+    # cancelled by a newer run would otherwise count as a failed required check.
+    name: codex-review-gate
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 20
