@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Set the codex-review status
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             // Only the Codex app may unlock the gate. A user login cannot end in
