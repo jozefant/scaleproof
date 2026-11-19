@@ -22,8 +22,12 @@ permissions:
   issues: read
   pull-requests: read
 
+# The event name is part of the group. GitHub links only the pull_request run to
+# the PR head commit. If a comment run cancels it, the PR shows a red job until
+# the next push. A pull_request run can briefly reset a success to pending. The
+# next 30-second poll sets success again.
 concurrency:
-  group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: codex-review-gate-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
