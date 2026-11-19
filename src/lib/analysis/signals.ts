@@ -176,6 +176,10 @@ function parseTolerantJson(content: string): unknown {
   return null;
 }
 
+function wildcardCount(pattern: string): number {
+  return pattern.split("*").length - 1;
+}
+
 function typeScriptAliases(index: RepositoryIndex): SourceAlias[] {
   // Variants such as `tsconfig.build.json` usually extend the base file and
   // omit `paths`, so the base file has priority.
@@ -190,11 +194,16 @@ function typeScriptAliases(index: RepositoryIndex): SourceAlias[] {
   const baseUrl = typeof options?.baseUrl === "string" ? options.baseUrl : ".";
   return Object.entries(options?.paths ?? {}).flatMap(([alias, targets]) => {
     if (!Array.isArray(targets) || !targets.every((target) => typeof target === "string")) return [];
+    // TypeScript rejects a `paths` key or substitution with more than one `*`
+    // (TS5061/TS5062), so such entries never resolve and are ignored here.
+    if (wildcardCount(alias) > 1) return [];
+    const validTargets = targets.filter((target) => wildcardCount(target) <= 1);
+    if (validTargets.length === 0) return [];
     const wildcard = alias.indexOf("*");
     return [{
       prefix: wildcard < 0 ? alias : alias.slice(0, wildcard),
       suffix: wildcard < 0 ? "" : alias.slice(wildcard + 1),
-      targets,
+      targets: validTargets,
       baseUrl,
     }];
   });
@@ -220,7 +229,8 @@ function bundlerAliases(index: RepositoryIndex): SourceAlias[] {
     for (const entry of (block[1] ?? "").matchAll(BUNDLER_ALIAS_ENTRY)) {
       const key = entry[1] ?? "";
       const target = entry[2] ?? "";
-      if (!key || !target || target.startsWith("http")) continue;
+      // A bundler alias is a literal prefix; a `*` in it would add a second wildcard.
+      if (!key || !target || target.startsWith("http") || target.includes("*")) continue;
       const prefix = key.endsWith("/") ? key : `${key}/`;
       const normalizedTarget = target.replace(/\/+$/, "");
       aliases.push({
@@ -244,7 +254,7 @@ function aliasImportCandidates(specifier: string, aliases: SourceAlias[]): strin
     if (!specifier.startsWith(alias.prefix) || !specifier.endsWith(alias.suffix)) return [];
     const wildcardValue = specifier.slice(alias.prefix.length, specifier.length - alias.suffix.length || undefined);
     return alias.targets.flatMap((target) => {
-      const resolved = `${alias.baseUrl}/${target.replace("*", wildcardValue)}`
+      const resolved = `${alias.baseUrl}/${target.replaceAll("*", wildcardValue)}`
         .replace(/\\/g, "/")
         .replace(/^\.\//, "")
         .replace(/\/(?:\.\/)+/g, "/")
