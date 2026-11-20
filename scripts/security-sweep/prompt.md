@@ -26,14 +26,14 @@ Do this step every run, also when there are no alerts. The `main` ruleset requir
 
 - Dependabot: `gh api "repos/jozefant/scaleproof/dependabot/alerts?state=open&severity=critical,high" --paginate`
 - Code scanning: `gh api "repos/jozefant/scaleproof/code-scanning/alerts?state=open" --paginate`. Keep only alerts where `rule.security_severity_level` is critical or high.
-- Secret scanning: `gh api "repos/jozefant/scaleproof/secret-scanning/alerts?state=open"`. Report only the count and alert numbers. Do not fix these in code, because they need a rotation by the owner.
+- Secret scanning: run exactly `gh api "repos/jozefant/scaleproof/secret-scanning/alerts?state=open&hide_secret=true" --paginate --jq '.[].number'`. Do not change this command and do not request any other secret-scanning field: the full response can contain the secret value, and the run log keeps every tool output. Report only the count and the alert numbers. Do not fix these in code, because they need a rotation by the owner.
 - If an API call fails, use `npm audit --audit-level=high --json` for dependencies, and state in the report which source was not readable.
 - List open Dependabot pull requests: `gh pr list --author app/dependabot`.
 - If there are zero critical or high alerts, do not create a branch or a pull request. Print "No critical/high alerts" with the counts, then the final output from section 5, and stop.
 
 ## 2. Prepare
 
-- Branch: `security/weekly-<YYYY-MM-DD>` from origin/main. If an open pull request with the `security/weekly-` prefix exists, check out its branch, rebase it on origin/main, and update that pull request instead of opening a new one.
+- Branch: `security/weekly-<YYYY-MM-DD>` from origin/main. If an open pull request with the `security/weekly-` prefix exists, check out its branch, merge origin/main into it (do not rebase, so that a normal push works), and update that pull request instead of opening a new one.
 - Run `npm ci`. Run `npx playwright install chromium` only if Playwright reports a missing browser.
 
 ## 3. Fix and verify loop (MAXIMUM 5 rounds)
@@ -54,7 +54,7 @@ Every failure of check 1 blocks the round, because `npm run verify` is the defin
 ## 4. Commit and pull request
 
 - Make small, scoped commits, for example `deps: bump next to 16.4.x (GHSA-...)` or `fix: complete sanitization in signals.ts (CodeQL #2)`.
-- `git push -u origin <branch>`. Open the pull request with `gh pr create`. Use `.github/pull_request_template.md` for the body.
+- `git push -u origin <branch>`. Never force-push. Open the pull request with `gh pr create`. Use `.github/pull_request_template.md` for the body.
 - If round 5 still fails, open the pull request as a draft and start the title with `[needs human]`.
 - The pull request body must contain:
   - An alert table: source, number, severity, package or rule, fix, status (fixed or still open).
