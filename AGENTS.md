@@ -40,7 +40,7 @@ boundary. Keep current implementation work in [TASKS.md](./TASKS.md).
 
 ## Commands
 
-Use Node.js 22.11 or newer and npm.
+Use Node.js 22.13 or newer and npm.
 
 ```bash
 npm ci
@@ -184,7 +184,7 @@ security change, and at least monthly while the project is active:
 
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 

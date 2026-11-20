@@ -46,7 +46,7 @@ The repository must retain the Node.js baseline in `package.json`:
 
 ```json
 "engines": {
-  "node": "^22.11.0"
+  "node": "^22.13.0"
 }
 ```
 

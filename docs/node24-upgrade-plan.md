@@ -1,7 +1,7 @@
 # Node.js 24 upgrade plan (D.3)
 
 Status: **plan only.** No runtime change is applied by this plan. Node.js 22
-(`^22.11.0`, `.nvmrc` = `22`) remains the executable baseline until every
+(`^22.13.0`, `.nvmrc` = `22`) remains the executable baseline until every
 verification step below passes and the separate implementation change is
 explicitly authorized.
 
@@ -14,17 +14,17 @@ Baseline recorded on 2026-08-24 with local Node.js `v22.21.1`.
 
 | # | File / setting | Current value | Required change | Owner | Command | Expected evidence | Rollback step |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | [`package.json`](../package.json) `engines.node` | `^22.11.0` | `^24.0.0` (single supported major after cut-over) | Jozef Antony | edit, then `npm pkg get engines` | `{"node":"^24.0.0"}` | `git revert` the atomic commit; `npm pkg get engines` shows `^22.11.0` |
+| 1 | [`package.json`](../package.json) `engines.node` | `^22.13.0` | `^24.0.0` (single supported major after cut-over) | Jozef Antony | edit, then `npm pkg get engines` | `{"node":"^24.0.0"}` | `git revert` the atomic commit; `npm pkg get engines` shows `^22.13.0` |
 | 2 | [`.nvmrc`](../.nvmrc) | `22` | `24` | Jozef Antony | edit, then `node -v` after `nvm use` | `v24.x.y` | restore `22`, `nvm use`, `node -v` shows `v22.x` |
-| 3 | [`package-lock.json`](../package-lock.json) root `engines` (mirrors `package.json`) | `{"node":"^22.11.0"}` | regenerated to `^24.0.0` | Jozef Antony | `npm install --package-lock-only` | lockfile root `packages[""].engines.node` = `^24.0.0`, `lockfileVersion` still `3` | `git checkout main -- package-lock.json && npm ci` |
+| 3 | [`package-lock.json`](../package-lock.json) root `engines` (mirrors `package.json`) | `{"node":"^22.13.0"}` | regenerated to `^24.0.0` | Jozef Antony | `npm install --package-lock-only` | lockfile root `packages[""].engines.node` = `^24.0.0`, `lockfileVersion` still `3` | `git checkout main -- package-lock.json && npm ci` |
 | 4 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) `actions/setup-node` | `node-version-file: .nvmrc` | no edit needed — it follows `.nvmrc` (row 2) | Jozef Antony | inspect the CI log's "Set up Node.js" step | CI log prints Node `v24.x` | reverting row 2 restores CI to 22 automatically |
 | 5 | [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml) | no Node pin (uses the runner default for `javascript-typescript`) | no edit; confirm the analysis still completes | Jozef Antony | re-run the CodeQL workflow | CodeQL run green on the upgrade branch | none required (no pin changed) |
 | 6 | Vercel project setting **Node.js Version** | `22.x` | `24.x` | Jozef Antony | Vercel dashboard -> Project -> Settings -> General -> Node.js Version | Settings page reads `24.x`; a fresh deployment's build log header prints Node `v24.x` | set the field back to `22.x` and redeploy the last verified 22 build |
 | 7 | Vercel **Functions** region / max duration for `/api/analyze` | `iad1`, 120 s (documented in [`vercel-setup.md`](../vercel-setup.md)) | unchanged — must be re-confirmed after the runtime change, not edited | Jozef Antony | Vercel -> Deployment -> Functions | region `iad1`, max duration 120 s unchanged | none (no change made); if drifted, restore from `vercel-setup.md` |
-| 8 | [`vercel-setup.md`](../vercel-setup.md) lines stating `Node.js 22.x` / `^22.11.0` (project runtime, engines snippet, verification checklist) | `22.x` | `24.x` | Jozef Antony | `grep -n "22" vercel-setup.md` | no stale `22.x` runtime claim remains | `git revert` the atomic commit |
-| 9 | [`AGENTS.md`](../AGENTS.md) "Use Node.js 22.11 or newer and npm." | 22.11 | 24.x | Jozef Antony | `grep -n "Node.js" AGENTS.md` | line reads the new baseline | `git revert` the atomic commit |
-| 10 | [`README.md`](../README.md) prerequisites line | "Node.js 22.11 or newer" | new baseline | Jozef Antony | `grep -n "Node.js" README.md` | line reads the new baseline | `git revert` the atomic commit |
-| 11 | [`BUILD_WEEK_SUBMISSION.md`](../BUILD_WEEK_SUBMISSION.md) prerequisites line | "Node.js 22.11 or newer" | new baseline | Jozef Antony | `grep -n "Node.js" BUILD_WEEK_SUBMISSION.md` | line reads the new baseline | `git revert` the atomic commit |
+| 8 | [`vercel-setup.md`](../vercel-setup.md) lines stating `Node.js 22.x` / `^22.13.0` (project runtime, engines snippet, verification checklist) | `22.x` | `24.x` | Jozef Antony | `grep -n "22" vercel-setup.md` | no stale `22.x` runtime claim remains | `git revert` the atomic commit |
+| 9 | [`AGENTS.md`](../AGENTS.md) "Use Node.js 22.13 or newer and npm." | 22.13 | 24.x | Jozef Antony | `grep -n "Node.js" AGENTS.md` | line reads the new baseline | `git revert` the atomic commit |
+| 10 | [`README.md`](../README.md) prerequisites line | "Node.js 22.13 or newer" | new baseline | Jozef Antony | `grep -n "Node.js" README.md` | line reads the new baseline | `git revert` the atomic commit |
+| 11 | [`BUILD_WEEK_SUBMISSION.md`](../BUILD_WEEK_SUBMISSION.md) prerequisites line | "Node.js 22.13 or newer" | new baseline | Jozef Antony | `grep -n "Node.js" BUILD_WEEK_SUBMISSION.md` | line reads the new baseline | `git revert` the atomic commit |
 | 12 | [`TASKS.md`](../TASKS.md) P2.3 "bundled Node 22 build" and the D.3 wording | Node 22 | Node 24 once P2.3's CLI target moves | Jozef Antony | `grep -n "Node 22" TASKS.md` | no stale CLI runtime target | `git revert` the atomic commit |
 | 13 | CLI package [`cli/package.json`](../cli/package.json) `engines.node` (added by P2.3) | `>=22.11.0` | `>=24.0.0` only if the CLI target moves with the app | Jozef Antony | `npm pkg get engines --prefix cli` | matches the intended CLI baseline | `git revert` the atomic commit |
 | 14 | CLI esbuild bundle target (`scripts/build-cli.mjs`, `target: node22`) | `node22` | `node24` only together with row 13 | Jozef Antony | `grep -n "node2" scripts/build-cli.mjs` | bundle target matches the CLI engines range | `git revert` the atomic commit |
@@ -154,7 +154,7 @@ is a project setting, not a repository file, so it cannot ride in the commit.
 2. Promote the last verified Node 22 deployment (the 2026-07-21 baseline build
    or later) back to the stable protected URL. Do not wait for a rebuild.
 3. `git revert` the atomic commit on `main`; confirm `npm pkg get engines`
-   reads `^22.11.0` and `.nvmrc` reads `22`.
+   reads `^22.13.0` and `.nvmrc` reads `22`.
 4. `nvm use 22 && rm -rf node_modules && npm ci && npm run verify` — must exit 0.
 5. Re-run the synthetic demo against the restored deployment and confirm a
    three-action report plus privacy-safe logs only.
