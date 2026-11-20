@@ -152,7 +152,8 @@ A ruleset on `main` enforces this; the [Codex review gate](./.github/workflows/c
 2. Codex reviews one to three minutes after a pull request opens, often after CI passes. A green CI is not a reason to merge. Wait for `codex-review`.
 3. For each Codex finding, either fix it in the same pull request with a test, or file it in `TASKS.md` and link the comment. Then reply on the thread with what was done, and resolve it.
 4. A push after the review does not trigger a new review. For a substantial change, comment `@codex review`.
-5. An admin may bypass the gate only when Codex is unavailable. Record the reason in the pull request.
+5. Codex does not review Dependabot pull requests automatically, and it ignores a request from a bot account. A user with a Codex account must post the `@codex review` comment.
+6. An admin may bypass the gate only when Codex is unavailable. Record the reason in the pull request.
 
 ## Handoff checklist
 
