@@ -33,20 +33,55 @@
 
 source ~/.zshrc >/dev/null 2>&1 || true
 
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+# STATE_DIR: the root folder for all job state. It is outside the repository,
+# because tsc and eslint scan the whole repository tree. A clone inside the
+# repository would make `npm run verify` check a second copy of the code.
 STATE_DIR="$HOME/Library/Caches/scaleproof-security-sweep"
+
+# WORK_DIR: a clone that only this job uses. Each run resets it to origin/main.
+# The agent works here, so it never touches the owner's working copy.
 WORK_DIR="$STATE_DIR/work/scaleproof"
+
+# OUT_DIR: one sweep_<timestamp>.jsonl transcript per run, plus launchd.log.
 OUT_DIR="$STATE_DIR/output"
+
+# LOCK_DIR: exists while a run is active. It stops a second run, for example a
+# manual kickstart during a scheduled run, from using the same clone.
 LOCK_DIR="$STATE_DIR/.lock"
+
+# REPO: the GitHub repository. The owner part also selects the gh account.
 REPO="jozefant/scaleproof"
+
+# MODEL: the Claude model for the agent. A fix that must pass `npm run verify`
+# needs a strong model; a weaker model uses more rounds and more turns.
 MODEL="claude-opus-5-5"
+
+# MAX_TURNS: the maximum number of agent steps in one run. One step is one
+# model answer plus one tool call (a git command, a file edit, a test run).
+# A normal run uses about 6 steps; 5 fix rounds use an estimated 150-250.
+# At the limit, the run ends with `error_max_turns` in launchd.log.
 MAX_TURNS=300
-# The job bills the API key. Claude Code checks the budget after each turn,
-# so a run can end slightly above this amount.
+
+# MAX_BUDGET_USD: the maximum API cost of one run, in US dollars. The job bills
+# the ANTHROPIC_API_KEY, and MAX_TURNS does not limit cost, because each step
+# costs more as the conversation grows. Claude Code checks the budget after
+# each step, so a run can end slightly above this amount. At the limit, the
+# run ends with `error_max_budget_usd` in launchd.log.
 MAX_BUDGET_USD=10
-# The time limit stops a stuck run before the next weekly run starts.
+
+# TIME_LIMIT: the maximum wall-clock time of one run. It stops a stuck command,
+# for example a hung test, which uses no steps and no budget.
 TIME_LIMIT=4h
 
-# A manual test may name a prompt file. Resolve it before the script changes directory.
+# SWEEP_PROMPT_FILE (optional environment variable, manual runs only): a path
+# to a prompt file to use instead of the merged prompt. Without it, the job
+# reads prompt.md from WORK_DIR at origin/main, so only a reviewed prompt runs.
+# Use it to test a prompt change before its pull request merges. The path is
+# made absolute here, because the script changes directory later.
 PROMPT_OVERRIDE="${SWEEP_PROMPT_FILE:+${SWEEP_PROMPT_FILE:A}}"
 
 mkdir -p "$OUT_DIR" "$STATE_DIR/work"
@@ -98,6 +133,18 @@ if [[ ! -s "$PROMPT_FILE" ]]; then
 fi
 echo "node $(node -v); prompt: $PROMPT_FILE"
 
+# The agent run. Flags:
+#   -p                  headless mode: run the prompt, then exit (no interactive session).
+#   --bare              use only ANTHROPIC_API_KEY; skip the subscription login, personal
+#                       hooks, memory, CLAUDE.md files, and commit attribution. The run then
+#                       depends only on this repository and the prompt.
+#   --permission-mode acceptEdits
+#                       allow file edits without a person to approve them.
+#   --allowedTools      the only tools the agent may use. Bash is limited to git, gh, npm,
+#                       npx, node, and read-only shell commands. Other commands are refused.
+#   --output-format stream-json --verbose
+#                       write every step to the log. The default text output can be empty,
+#                       and then a failed run leaves no evidence.
 timeout "$TIME_LIMIT" claude -p "$(cat "$PROMPT_FILE")" \
   --bare \
   --model "$MODEL" \
