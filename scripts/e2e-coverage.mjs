@@ -14,7 +14,7 @@
  *   Playwright.
  *
  * Prerequisites
- *   Node.js 22.11+, an installed Playwright browser, and the dev dependency
+ *   Node.js 22.13+, an installed Playwright browser, and the dev dependency
  *   `monocart-coverage-reports`. No API key and no network access are needed;
  *   `OPENAI_API_KEY` is blanked by playwright.coverage.config.ts.
  *

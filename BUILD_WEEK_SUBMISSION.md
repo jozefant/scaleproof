@@ -50,7 +50,7 @@ the value printed by `/feedback`; it is authoritative.
 
 ### Instructions for judges
 
-Scaleproof is a local Next.js application. It requires Node.js 22.11 or newer
+Scaleproof is a local Next.js application. It requires Node.js 22.13 or newer
 and npm; macOS, Linux, and Windows are supported where those prerequisites and
 the Playwright browser dependencies are available.
 

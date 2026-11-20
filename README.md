@@ -42,7 +42,7 @@ read-only: it never runs the scanned repository or claims runtime capacity.
 
 ## Setup and run locally
 
-Prerequisites: Node.js 22.11 or newer and npm. A network connection to public
+Prerequisites: Node.js 22.13 or newer and npm. A network connection to public
 GitHub is needed only when scanning a public repository.
 
 ```bash

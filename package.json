@@ -22,7 +22,7 @@
     "test:e2e:coverage": "node ./scripts/e2e-coverage.mjs"
   },
   "engines": {
-    "node": "^22.11.0"
+    "node": "^22.13.0"
   },
   "overrides": {
     "postcss": "8.5.26",

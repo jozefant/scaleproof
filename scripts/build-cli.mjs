@@ -117,7 +117,7 @@ async function main() {
     platform: "node",
     format: "esm",
     target: "node22",
-    // Node 22.11 is the executable baseline; see the root package engines.
+    // Node 22.11 is the CLI executable baseline; see cli/package.json engines.
     minify: false,
     sourcemap: false,
     treeShaking: true,
