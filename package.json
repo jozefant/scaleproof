@@ -34,7 +34,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "lucide-react": "^1.25.0",
     "next": "16.4.5",
-    "openai": "^6.48.0",
+    "openai": "^7.57.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "recharts": "^3.9.2",
