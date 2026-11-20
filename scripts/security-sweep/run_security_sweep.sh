@@ -17,7 +17,7 @@
 #   - ANTHROPIC_API_KEY exported in ~/.zshrc. The `--bare` flag makes Claude Code
 #     use only this key; it does not read a subscription login.
 #   - nvm loaded by ~/.zshrc, and the Node.js version from .nvmrc installed.
-#   - claude and gh on PATH after ~/.zshrc. gh logged in as the repository owner.
+#   - claude and gh on PATH after ~/.zprofile and ~/.zshrc. gh logged in as the repository owner.
 #
 # Install (weekly, Monday 08:00 local time): create
 # ~/Library/LaunchAgents/com.antony.scaleproof-security-sweep.plist with
@@ -31,6 +31,10 @@
 # Test an unmerged prompt (manual runs only):
 #            SWEEP_PROMPT_FILE=scripts/security-sweep/prompt.md scripts/security-sweep/run_security_sweep.sh
 
+# launchd starts the script with an almost empty environment. Load the login
+# shell files in the same order as a login shell: ~/.zprofile sets PATH for
+# Homebrew (gh) and ~/.local/bin (claude); ~/.zshrc loads nvm and the API key.
+source ~/.zprofile >/dev/null 2>&1 || true
 source ~/.zshrc >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------
