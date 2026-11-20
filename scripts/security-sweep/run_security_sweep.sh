@@ -40,6 +40,9 @@ LOCK_DIR="$STATE_DIR/.lock"
 REPO="jozefant/scaleproof"
 MODEL="claude-opus-5-5"
 MAX_TURNS=300
+# The job bills the API key. Claude Code checks the budget after each turn,
+# so a run can end slightly above this amount.
+MAX_BUDGET_USD=10
 # The time limit stops a stuck run before the next weekly run starts.
 TIME_LIMIT=4h
 
@@ -99,6 +102,7 @@ timeout "$TIME_LIMIT" claude -p "$(cat "$PROMPT_FILE")" \
   --bare \
   --model "$MODEL" \
   --max-turns "$MAX_TURNS" \
+  --max-budget-usd "$MAX_BUDGET_USD" \
   --permission-mode acceptEdits \
   --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
     "Bash(git:*)" "Bash(gh:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(node:*)" \
