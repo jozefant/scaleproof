@@ -31,6 +31,7 @@ more than three immediate actions.
 | `src/lib/report` | Public report contract and Markdown rendering |
 | `cli` | Publishable CLI package: launcher, esbuild bundle, README, and licence |
 | `fixtures/scaleproof-demo` | Synthetic, stable end-to-end analysis fixture |
+| `scripts/security-sweep` | Owner's weekly local job: Codex review requests on Dependabot PRs, and critical/high alert fixes through one PR |
 | `docs/ARCHITECTURE.md` | Runtime boundaries, dependency direction, and failure behaviour |
 
 Use the documentation authority map in [README.md](./README.md). Read
